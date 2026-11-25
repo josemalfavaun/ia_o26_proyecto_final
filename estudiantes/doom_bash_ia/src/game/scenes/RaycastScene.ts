@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { createAiRuntime, type AiRuntime } from '../../ai/runtime/AiRuntime';
 import { GAME_HEIGHT, GAME_WIDTH } from '../dimensions';
 import { DoorSystem } from '../systems/DoorSystem';
 import { GameDirector, type SpawnRequest } from '../systems/GameDirector';
@@ -459,6 +460,9 @@ export class RaycastScene extends Phaser.Scene {
   private readonly encounterPatternCooldownUntil = new Map<string, number>();
   private debugHudVisible = false;
   private perfHudVisible = false;
+  private aiRuntime: AiRuntime | null = null;
+  private aiPanelVisible = false;
+  private aiPanelRefreshAt = 0;
   private frameStats: RaycastFrameStatsState = createRaycastFrameStatsState();
   private narrationOverlay!: RaycastNarrationOverlay;
   private gameMasterNarration!: GameMasterNarrationBridge;
@@ -515,6 +519,7 @@ export class RaycastScene extends Phaser.Scene {
   private muzzleFlashAnchorY = GAME_HEIGHT - 54;
   private debugText!: Phaser.GameObjects.Text;
   private perfText!: Phaser.GameObjects.Text;
+  private aiPanelText!: Phaser.GameObjects.Text;
   private healthText!: Phaser.GameObjects.Text;
   private targetText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
@@ -693,6 +698,28 @@ export class RaycastScene extends Phaser.Scene {
     if (this.gamePaused) return;
     this.perfHudVisible = !this.perfHudVisible;
     this.perfText?.setVisible(this.perfHudVisible);
+  };
+
+  private readonly handleToggleAiPanel = (): void => {
+    if (this.gamePaused) return;
+    this.aiPanelVisible = !this.aiPanelVisible;
+    this.aiPanelText?.setVisible(this.aiPanelVisible);
+    this.aiPanelRefreshAt = 0;
+  };
+
+  private readonly handleCycleAiNavigation = (): void => {
+    if (this.gamePaused || !this.aiRuntime) return;
+    const mode = this.aiRuntime.cycleNavigation();
+    this.setCombatMessage(`IA // NAVEGACIÓN: ${mode === 'astar' ? 'A*' : 'REGLA ORIGINAL'}`, 1400);
+    this.aiPanelRefreshAt = 0;
+  };
+
+  private readonly handleCycleAiBoss = (): void => {
+    if (this.gamePaused || !this.aiRuntime) return;
+    const mode = this.aiRuntime.cycleBossDirector();
+    const label = mode === 'rule' ? 'REGLA ORIGINAL' : mode === 'expectimax' ? 'EXPECTIMAX' : 'BANDIDO THOMPSON';
+    this.setCombatMessage(`IA // JEFE: ${label}`, 1400);
+    this.aiPanelRefreshAt = 0;
   };
 
   private readonly handleObjectiveReminderKey = (): void => {
@@ -1567,6 +1594,23 @@ export class RaycastScene extends Phaser.Scene {
       .setDepth(19)
       .setVisible(false);
 
+    this.aiRuntime ??= createAiRuntime({
+      storage: typeof window !== 'undefined' ? window.localStorage : null,
+      query: typeof window !== 'undefined' ? window.location.search : ''
+    });
+    this.aiPanelText = this.add
+      .text(GAME_WIDTH - 12, 104, '', {
+        fontFamily: 'monospace',
+        fontSize: '11px',
+        color: this.hudCss.debugText,
+        backgroundColor: '#020408ee',
+        padding: { x: 8, y: 6 },
+        lineSpacing: 2
+      })
+      .setOrigin(1, 0)
+      .setDepth(19)
+      .setVisible(this.aiPanelVisible);
+
     stopGameMasterVoice('scene_start');
     const narrationHudLayout = buildRaycastHudLayout(GAME_WIDTH, GAME_HEIGHT);
     this.narrationOverlay = new RaycastNarrationOverlay(
@@ -1719,6 +1763,7 @@ export class RaycastScene extends Phaser.Scene {
       fpsTarget === 0 ? 120 : fpsTarget,
     );
     this.renderMinimapThrottled();
+    this.tickAiRuntime();
     if (this.debugHudVisible) {
       this.debugText.setText(
         buildRaycastDebugLine({
@@ -1752,6 +1797,23 @@ export class RaycastScene extends Phaser.Scene {
         this.detectedActiveInputKind = resolved;
         this.refreshPauseMenuBody();
       }
+    }
+  }
+
+  /** Avanza el runtime de IA (ventana del bandido) y refresca el panel unas 4 veces por segundo. */
+  private tickAiRuntime(): void {
+    if (!this.aiRuntime || this.gamePaused || this.netConnected) return;
+    const frame = {
+      nowMs: this.time.now,
+      bossAlive: this.getLiveBosses().length > 0,
+      playerAlive: this.playerAlive,
+      health: this.playerHealth,
+      maxHealth: this.playerMaxHealth
+    };
+    this.aiRuntime.update(frame);
+    if (this.aiPanelVisible && this.time.now >= this.aiPanelRefreshAt) {
+      this.aiPanelRefreshAt = this.time.now + 250;
+      this.aiPanelText.setText(this.aiRuntime.panelLines(frame).join('\n'));
     }
   }
 
@@ -2045,6 +2107,9 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.on('keydown-BACKTICK', this.handleToggleDebug);
     keyboard?.on('keydown-F3', this.handleToggleDebug);
     keyboard?.on('keydown-P', this.handleTogglePerfHud);
+    keyboard?.on('keydown-I', this.handleToggleAiPanel);
+    keyboard?.on('keydown-U', this.handleCycleAiNavigation);
+    keyboard?.on('keydown-O', this.handleCycleAiBoss);
     keyboard?.on('keydown-G', this.handleGameMasterTestKey);
     keyboard?.on('keydown-L', this.handleObjectiveReminderKey);
     keyboard?.on('keydown-UP', this.handlePauseMenuUp);
@@ -2163,6 +2228,9 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.off('keydown-BACKTICK', this.handleToggleDebug);
     keyboard?.off('keydown-F3', this.handleToggleDebug);
     keyboard?.off('keydown-P', this.handleTogglePerfHud);
+    keyboard?.off('keydown-I', this.handleToggleAiPanel);
+    keyboard?.off('keydown-U', this.handleCycleAiNavigation);
+    keyboard?.off('keydown-O', this.handleCycleAiBoss);
     keyboard?.off('keydown-G', this.handleGameMasterTestKey);
     keyboard?.off('keydown-L', this.handleObjectiveReminderKey);
     keyboard?.off('keydown-UP', this.handlePauseMenuUp);
@@ -3228,7 +3296,7 @@ export class RaycastScene extends Phaser.Scene {
         this.setCombatMessage(bossHud.telegraphLocked);
       }
       this.bossTelegraphById.set(boss.id, telegraphActive);
-      const bossShots = tickRaycastBossVolleys(boss, bossPlayerCtx, this.time.now, this.map);
+      const bossShots = tickRaycastBossVolleys(boss, bossPlayerCtx, this.time.now, this.map, this.aiRuntime?.bossPolicy());
       if (bossShots.length > 0) {
         this.enemyProjectiles.push(...bossShots);
         this.setCombatMessage(bossHud.volleyInbound);
@@ -3251,7 +3319,8 @@ export class RaycastScene extends Phaser.Scene {
       {
         speedMultiplier:
           (this.activeLevelEvent.effects.enemySpeedMultiplier ?? 1) * (this.runModifier?.effects.enemySpeedMul ?? 1),
-        projectileSpeedMultiplier: this.activeLevelEvent.effects.enemyProjectileSpeedMultiplier ?? 1
+        projectileSpeedMultiplier: this.activeLevelEvent.effects.enemyProjectileSpeedMultiplier ?? 1,
+        navigator: this.aiRuntime?.navigator()
       }
     );
     if (enemyResult.flashActivations.length > 0) {
@@ -4951,6 +5020,8 @@ export class RaycastScene extends Phaser.Scene {
       stationaryMs: this.playerStationaryMs,
       vx: this.player.velocity.x,
       vy: this.player.velocity.y,
+      health: this.playerHealth,
+      damageTaken: this.runBossDamageTaken,
     };
   }
 

@@ -119,12 +119,16 @@ queda en 0.36. El olvido no ayudó de forma apreciable (0.31 contra 0.30 de Thom
 - **Un jugador real probablemente juegue pocas decenas de encuentros** (es una suposición, no un dato). Con 9 brazos y
   sesiones de 10 o 20 encuentros, el bandido casi no aprende. Para el juego real conviene el prior poblacional y pocos brazos.
 
-## Qué falta para el juego
+## En el juego
 
-La integración a `RaycastScene` (elegir brazo al empezar el jefe, reportar la vida final al terminar, guardar las
-creencias en el almacenamiento local) y el panel de depuración con las creencias del bandido están planeados para la
-Fase 3. Para eso el juego ya tiene `RaycastPlaytestTelemetry`. Solo hace falta un registro con el brazo y la
-recompensa. La telemetría del simulador (`telemetryCsv`) usa los mismos campos.
+La integración está hecha (`src/ai/runtime/AiRuntime.ts`, ver `docs/PANEL_IA.md`): el bandido elige un brazo cuando
+aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si el jefe cae, calcula la recompensa con la
+vida final, guarda su creencia en el almacenamiento del navegador y empieza otra ventana. El panel muestra el brazo en
+juego, la ventana y las creencias. Se activa con la tecla `O` o con `?ia=bandido`.
+
+No está verificado en una partida larga con cierre de encuentro y guardado en el navegador (solo con pruebas unitarias),
+y no hay datos de personas. El registro de telemetría con brazo y recompensa que usa el simulador (`telemetryCsv`) no se
+exporta desde el juego.
 
 ## Cómo reproducirlo
 

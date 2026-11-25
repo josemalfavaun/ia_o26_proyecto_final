@@ -85,17 +85,31 @@ export interface ThompsonOptions {
    * este factor (sin bajar de la creencia inicial). 1 = no olvida; menos de 1 permite seguir a un jugador que cambia.
    */
   discount?: number;
+  /** Evidencia con la que arrancar, por ejemplo la guardada en una sesión anterior. */
+  initial?: ThompsonCounts;
 }
 
-export function createThompsonSelector(options: ThompsonOptions): ArmSelector {
+export interface ThompsonCounts {
+  successes: number[];
+  failures: number[];
+  pulls: number[];
+}
+
+export interface ThompsonSelector extends ArmSelector {
+  /** Copia de la evidencia acumulada, para guardarla y restaurarla. */
+  counts(): ThompsonCounts;
+}
+
+export function createThompsonSelector(options: ThompsonOptions): ThompsonSelector {
   const rng = createSeededRng(options.seed);
   const alpha0 = (arm: number): number => (typeof options.priorAlpha === 'number' ? options.priorAlpha : options.priorAlpha?.[arm] ?? 1);
   const beta0 = (arm: number): number => (typeof options.priorBeta === 'number' ? options.priorBeta : options.priorBeta?.[arm] ?? 1);
   const discount = options.discount ?? 1;
-  const successes = new Array<number>(options.arms).fill(0);
-  const failures = new Array<number>(options.arms).fill(0);
-  const pulls = new Array<number>(options.arms).fill(0);
+  const successes = options.initial ? [...options.initial.successes] : new Array<number>(options.arms).fill(0);
+  const failures = options.initial ? [...options.initial.failures] : new Array<number>(options.arms).fill(0);
+  const pulls = options.initial ? [...options.initial.pulls] : new Array<number>(options.arms).fill(0);
   return {
+    counts: () => ({ successes: [...successes], failures: [...failures], pulls: [...pulls] }),
     name: options.label ?? (discount < 1 ? `Thompson (olvido ${discount})` : 'Thompson'),
     select() {
       let best = 0;

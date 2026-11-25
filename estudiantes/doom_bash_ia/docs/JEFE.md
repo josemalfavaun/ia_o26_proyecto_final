@@ -62,7 +62,7 @@ Cada celda: daño por salva (error de ritmo entre paréntesis).
 - **La meta `T = 6` es un parámetro de diseño, no un hecho.** La regla original, con el bot guionado, hace en `volt-archon` solo 2.1 por salva; la política de ritmo sube eso a 6 y la supervivencia media del bot baja de unos 73 s a unos 39 s. Eso no es "mejor": es un jefe más duro porque se pidió una meta más alta. Elegir `T` es una decisión de balance que debería salir de jugadores reales.
 - **Los jugadores del simulador no son humanos.** El guionado, el aleatorio y el quieto son bots de referencia. Ningún bot derrota al jefe salvo `ash-judge` con el guionado en alrededor de 3–8 % de los episodios, así que las columnas de victoria casi no discriminan. Las conclusiones sobre ritmo valen para esos tres perfiles y no se pueden extrapolar a personas sin probar con personas.
 - **El modelo del jugador está calibrado a mano** (`PRIOR`, `PERSIST_MASS`, `dodgeSpeed = 6.5`) contra el mismo simulador. Hay circularidad: el modelo y el banco de pruebas comparten supuestos de movimiento. La variante `adaptive` (conteos con olvido) está implementada y probada, pero no mostró ganancia medible, así que no se recomienda activarla.
-- **No está conectado a la escena.** Esta entrega demuestra la política en el simulador. Integrarla a `RaycastScene` detrás de `AiFlags.bossPolicy` está planeado para el panel de IA (Fase 3).
+- **Solo se midió en el simulador.** La política está conectada a `RaycastScene` a través de `AiRuntime` (tecla `O` o `?ia=expectimax`; ver `docs/PANEL_IA.md`), pero el modo "expectimax" del panel usa una meta fija de 4 puntos por salva y no se midió con personas.
 
 ## Pruebas
 

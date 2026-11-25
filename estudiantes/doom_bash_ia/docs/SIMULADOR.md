@@ -23,7 +23,7 @@ No reutiliza `RaycastPlayerController` (importa Phaser), así que el movimiento 
 | Jefe | Un solo jefe por nivel | Igual que en el nivel del jefe actual |
 | Aleatoriedad del núcleo | `Math.random` se sustituye por un generador con semilla durante cada paso | Reproducible sin tocar el código del juego |
 
-El simulador es un banco de pruebas, no una fuente de datos de jugadores: las decisiones de IA que dependan de comportamiento humano (M3) usan partidas reales.
+El simulador es un banco de pruebas, no una fuente de datos de jugadores: las decisiones de IA que dependan de comportamiento humano (M3) se evaluaron con bots de distinta habilidad, no con personas; no hay datos de jugadores reales.
 
 ## Opciones para estudiar la IA
 

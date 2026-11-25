@@ -15,7 +15,7 @@ Hoy los enemigos no planean rutas. Persiguen en línea recta hacia el jugador y,
 
 La lógica anterior queda intacta: sin `navigator` en los modificadores, el juego se comporta exactamente como antes (las pruebas originales del juego siguen pasando sin cambios). Esto es lo que permite comparar contra la regla original y lo que respalda el interruptor `AiFlags.enemyNavigation`.
 
-Todavía no está conectado a la escena del juego. Eso se hace con el panel de IA (fase 3): `RaycastScene` crea el navegador cuando la bandera vale `'astar'` y lo pasa en los modificadores.
+Está conectado a la escena del juego a través de `AiRuntime` (`src/ai/runtime/AiRuntime.ts`): `RaycastScene` le pide el navegador y lo pasa en los modificadores de `updateRaycastEnemies`. Se activa con la tecla `U` o con `?ia=astar` en la URL; por omisión vale la regla original. Ver `docs/PANEL_IA.md`.
 
 ## Cómo funciona
 
@@ -50,7 +50,7 @@ Nota: varios niveles comparten el mismo trazado (por ejemplo `access-node` y `me
 
 - El escenario de persecución es una prueba de estrés, no una partida real: el blanco no se mueve, no pelea, y los enemigos alertados conocen su posición (así funciona la alerta del juego). Mide cuánto ayuda A* para **llegar**, no cuánto mejora la partida.
 - Con A* los enemigos son notablemente más peligrosos. Antes de activarlo por defecto hay que revisar el balance con partidas humanas y, si hace falta, bajar velocidad o daño. Por eso la bandera arranca en `'legacy'`.
-- El efecto en partidas reales con un jugador que dispara y se mueve se mide aparte (M3 usa partidas humanas).
+- El efecto en partidas reales con un jugador que dispara y se mueve no se midió: no hay datos de personas. Ver `INFORME.md`.
 
 ## Cómo reproducir
 

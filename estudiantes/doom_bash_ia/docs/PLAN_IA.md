@@ -5,6 +5,11 @@ Dice qué IA tiene hoy el juego, qué se agrega, con qué unidad del curso se co
 cómo se mide y en qué orden se construye. Lo marcado como "confirmar" depende del temario y de
 lo que el profesor autorice.
 
+> **Estado al 25 de noviembre de 2026.** Hechos: M0, M1, M2, M3 y el panel de IA en el juego. No se hicieron: M4 (bot
+> con Q-learning), M5 (narrador con estado estructurado), MCTS con UCT, la coordinación por anillo de aproximación y el
+> dibujo de rutas de A\* en el juego. Resultados, cifras y límites en [`INFORME.md`](../INFORME.md). Lo que sigue es el
+> plan original, sin reescribir.
+
 ## 1. Punto de partida: qué es heredado y qué es nuevo
 
 El juego base viene de un proyecto de equipo de años anteriores (créditos en `LICENSE`). Lo que

@@ -11,3 +11,5 @@ No subas caras ni datos personales: el repo es público.
 | 2026-11-24 | josemalfavaun | Navegación de enemigos con A* detrás de una interfaz opcional; benchmark de BFS, Dijkstra, voraz y A* en mapas reales y de persecución contra la regla original | docs/NAVEGACION.md |
 | 2026-11-24 | josemalfavaun | Jefes con expectimax (objetivos de daño y de ritmo) detrás de una interfaz opcional; benchmark contra la regla original y contra políticas triviales, con resultado negativo documentado | docs/JEFE.md |
 | 2026-11-24 | josemalfavaun | Director adaptativo con Thompson sampling sobre metas de presión del jefe; comparación contra epsilon-voraz, UCB1 y brazo fijo en 5 tipos de jugador simulados, con resultado mixto documentado | docs/DIRECTOR.md |
+| 2026-11-24 | josemalfavaun | Fase 3: runtime de IA en el juego (teclas I/U/O, panel, ?ia=), persistencia del bandido y demo en línea en Vercel | docs/PANEL_IA.md, https://doom-bash-ia-mu.vercel.app |
+| 2026-11-25 | josemalfavaun | README e informe con resultados honestos por módulo y límites; corregidos docs que decían que la IA no estaba conectada al juego | INFORME.md |
