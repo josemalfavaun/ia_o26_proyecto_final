@@ -85,6 +85,16 @@ export interface SimObservation {
   enemies: SimEnemyView[];
   boss: SimBossView | null;
   projectilesInFlight: number;
+  /** Proyectiles hostiles en el aire, para bots que esquivan. */
+  projectiles: SimProjectileView[];
+}
+
+export interface SimProjectileView {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
 }
 
 export interface SimBot {
@@ -120,6 +130,8 @@ export interface SimEpisodeResult {
   meanArrivalMs: number | null;
   /** Salvas lanzadas por los jefes (0 en niveles sin jefe). */
   bossVolleys: number;
+  /** Enemigos que hizo aparecer el director (0 si el episodio no lo usa). */
+  directorSpawns: number;
   /** Huella del estado del mundo a lo largo del episodio (FNV-1a de 32 bits, en hexadecimal). */
   digest: string;
 }

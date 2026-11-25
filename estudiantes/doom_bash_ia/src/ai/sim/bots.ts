@@ -77,14 +77,98 @@ const ROUTE_REPLAN_MS = 350;
 /** Cuántas celdas por delante de la ruta apunta el bot; más lejos suaviza las esquinas. */
 const ROUTE_LOOKAHEAD = 2;
 
-export const scriptedBotFactory: SimBotFactory = (seed: number): SimBot => {
+/** Parámetros que distinguen a un jugador hábil de uno torpe. Los valores por omisión son los del bot guionado. */
+export interface ScriptedBotParams {
+  /** Desviación del apuntado, en radianes (ruido uniforme en ±valor). */
+  aimNoise: number;
+  /** Cuánto corrige el giro por radian de error. Menos ganancia = apunta más lento. */
+  turnGain: number;
+  /** Error angular máximo con el que se anima a disparar. */
+  fireTolerance: number;
+  /** Distancia por debajo de la cual retrocede. */
+  retreatDistance: number;
+  /**
+   * Probabilidad (por decisión) de reaccionar a un proyectil que va a pegar. 0 = no esquiva nunca,
+   * que es el comportamiento del bot guionado original.
+   */
+  dodgeReaction: number;
+  name: string;
+}
+
+export const DEFAULT_SCRIPTED_PARAMS: ScriptedBotParams = {
+  aimNoise: 0.04,
+  turnGain: 4,
+  fireTolerance: 0.1,
+  retreatDistance: 3.5,
+  dodgeReaction: 0,
+  name: 'guionado'
+};
+
+/** Tiempo máximo hacia adelante en que un proyectil cuenta como amenaza. */
+const DODGE_HORIZON_S = 0.9;
+
+/**
+ * Dirección de esquiva (vector unitario en coordenadas del mapa) si algún proyectil pasará a menos de su radio
+ * más el cuerpo del jugador dentro del horizonte. Se aleja del lado por el que pasaría la bala.
+ */
+export function findDodgeDirection(observation: SimObservation): { x: number; y: number } | null {
+  const { player, projectiles } = observation;
+  let best: { x: number; y: number; urgency: number } | null = null;
+  for (const projectile of projectiles) {
+    const speedSq = projectile.vx * projectile.vx + projectile.vy * projectile.vy;
+    if (speedSq < 1e-6) continue;
+    const rx = player.x - projectile.x;
+    const ry = player.y - projectile.y;
+    const t = (rx * projectile.vx + ry * projectile.vy) / speedSq;
+    if (t < 0 || t > DODGE_HORIZON_S) continue;
+    const missX = rx - projectile.vx * t;
+    const missY = ry - projectile.vy * t;
+    const miss = Math.hypot(missX, missY);
+    if (miss > projectile.radius + 0.45) continue;
+    // Se esquiva perpendicular a la trayectoria, hacia el lado en que ya está el jugador (o el derecho si está justo en medio).
+    const speed = Math.sqrt(speedSq);
+    let nx = -projectile.vy / speed;
+    let ny = projectile.vx / speed;
+    if (nx * missX + ny * missY < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    if (best === null || t < best.urgency) best = { x: nx, y: ny, urgency: t };
+  }
+  return best ? { x: best.x, y: best.y } : null;
+}
+
+/**
+ * Jugador guionado con habilidad `skill` en [0, 1]. 1 apunta con precisión y retrocede a tiempo;
+ * 0 apunta mal, gira lento y dispara casi sin mirar. Es un modelo de público para el director adaptativo:
+ * no pretende imitar a una persona.
+ */
+export function skilledBotFactory(skill: number): SimBotFactory {
+  const t = Math.max(0, Math.min(1, skill));
+  const lerp = (low: number, high: number): number => low + (high - low) * t;
+  const params: ScriptedBotParams = {
+    aimNoise: lerp(0.45, 0.02),
+    turnGain: lerp(1.6, 5),
+    fireTolerance: lerp(0.35, 0.07),
+    retreatDistance: lerp(2.2, 4),
+    dodgeReaction: lerp(0.03, 0.55),
+    name: `habilidad-${t.toFixed(2)}`
+  };
+  return (seed: number) => createScriptedBot(seed, params);
+}
+
+export const scriptedBotFactory: SimBotFactory = (seed: number): SimBot => createScriptedBot(seed, DEFAULT_SCRIPTED_PARAMS);
+
+export function createScriptedBot(seed: number, params: ScriptedBotParams): SimBot {
   const rng = createSeededRng((seed ^ 0x85ebca6b) >>> 0);
   let strafeSign = rng() < 0.5 ? -1 : 1;
   let flipAtMs = 0;
   let route: Waypoint[] = [];
   let replanAtMs = 0;
+  let nextReactionAtMs = 0;
+  let reacting = false;
   return {
-    name: 'guionado',
+    name: params.name,
     decide(observation: SimObservation): PlayerAction {
       const { player } = observation;
       if (observation.timeMs >= flipAtMs) {
@@ -96,17 +180,39 @@ export const scriptedBotFactory: SimBotFactory = (seed: number): SimBot => {
       if (!target) {
         return { ...IDLE_ACTION, reload: !player.reloading && player.ammo < player.ammoCapacity };
       }
+      let dodge: { x: number; y: number } | null = null;
+      if (params.dodgeReaction > 0) {
+        const threat = findDodgeDirection(observation);
+        if (threat) {
+          if (observation.timeMs >= nextReactionAtMs) {
+            nextReactionAtMs = observation.timeMs + 180;
+            reacting = rng() < params.dodgeReaction;
+          }
+          if (reacting) dodge = threat;
+        } else {
+          reacting = false;
+        }
+      }
       if (target.hasLineOfSight) {
         route = [];
-        const error = wrapAngle(target.bearing - player.angle + symmetricNoise(rng) * 0.04);
+        const error = wrapAngle(target.bearing - player.angle + symmetricNoise(rng) * params.aimNoise);
         let forward = 1;
-        if (target.distance < 3.5) forward = -1;
+        if (target.distance < params.retreatDistance) forward = -1;
         else if (target.distance <= 7) forward = 0;
+        let strafe = strafeSign;
+        if (dodge) {
+          // Descompone la dirección de esquiva en la base de la cámara: adelante y derecha.
+          const right = { x: Math.cos(player.angle + Math.PI / 2), y: Math.sin(player.angle + Math.PI / 2) };
+          const side = dodge.x * right.x + dodge.y * right.y;
+          if (Math.abs(side) > 0.2) strafe = side > 0 ? 1 : -1;
+          const ahead = dodge.x * Math.cos(player.angle) + dodge.y * Math.sin(player.angle);
+          if (Math.abs(ahead) > 0.5) forward = ahead > 0 ? 1 : -1;
+        }
         return {
           forward,
-          strafe: strafeSign,
-          turn: clampUnit(error * 4),
-          fire: Math.abs(error) < 0.1 && !needsReload,
+          strafe,
+          turn: clampUnit(error * params.turnGain),
+          fire: Math.abs(error) < params.fireTolerance && !needsReload,
           reload: needsReload
         };
       }
@@ -128,6 +234,6 @@ export const scriptedBotFactory: SimBotFactory = (seed: number): SimBot => {
       };
     }
   };
-};
+}
 
 export const REFERENCE_BOTS: readonly SimBotFactory[] = [idleBotFactory, randomBotFactory, scriptedBotFactory];

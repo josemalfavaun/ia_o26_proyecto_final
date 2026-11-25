@@ -1,7 +1,8 @@
+import type { DirectorConfig } from '../../game/systems/DirectorConfig';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastEnemyNavigator } from '../../game/raycast/RaycastEnemyNavigator';
 import type { RaycastDifficultyId, SimBotFactory, SimEpisodeResult, SimOutcome } from '../types';
-import { createSimWorld, observeSimWorld, SIM_DEFAULT_DT_MS, stepSimWorld, type SimWorld } from './SimWorld';
+import { createSimWorld, observeSimWorld, type EnemyScaling, SIM_DEFAULT_DT_MS, stepSimWorld, type SimWorld } from './SimWorld';
 
 export interface EpisodeOptions {
   levelId: string;
@@ -18,6 +19,10 @@ export interface EpisodeOptions {
   alertRefreshMs?: number;
   /** Ver `SimWorldOptions.invulnerable`. */
   invulnerable?: boolean;
+  /** Escala daño y velocidad de los enemigos (ver `SimWorldOptions.enemyScaling`). */
+  enemyScaling?: EnemyScaling;
+  /** Director de spawns del juego con esta configuración (ver `SimWorldOptions.directorConfig`). */
+  directorConfig?: Partial<DirectorConfig>;
   /** Fábrica de la política del jefe; se llama una vez por episodio porque la política puede guardar estado. */
   bossPolicyFactory?: (seed: number) => RaycastBossPolicy;
 }
@@ -75,6 +80,8 @@ export function runEpisode(options: EpisodeOptions): SimEpisodeResult {
     navigator: options.navigatorFactory?.(),
     alertRefreshMs: options.alertRefreshMs,
     invulnerable: options.invulnerable,
+    directorConfig: options.directorConfig,
+    enemyScaling: options.enemyScaling,
     bossPolicy: options.bossPolicyFactory?.(options.seed)
   });
   const bot = options.bot(options.seed);
@@ -107,6 +114,7 @@ export function runEpisode(options: EpisodeOptions): SimEpisodeResult {
     pelletsFired: world.stats.pelletsFired,
     pelletsHit: world.stats.pelletsHit,
     bossVolleys: world.stats.bossVolleys,
+    directorSpawns: world.stats.directorSpawns,
     firstDamageMs: world.stats.firstDamageMs,
     enemiesArrived: world.stats.arrivalTimesMs.length,
     meanArrivalMs:

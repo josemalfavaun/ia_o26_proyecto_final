@@ -33,6 +33,9 @@ El simulador es un banco de pruebas, no una fuente de datos de jugadores: las de
 - Métricas de contacto en cada resultado: `firstDamageMs`, `enemiesArrived`, `meanArrivalMs`.
 - `bossPolicyFactory`: crea la política del jefe (expectimax u otra) con la semilla del episodio. Sin ella, rige la regla original. Ver `docs/JEFE.md`.
 - Métrica de jefe en cada resultado: `bossVolleys` (salvas lanzadas).
+- `directorConfig`: activa el `GameDirector` real del juego con esa configuración (solo en niveles con director). Sin él no hay spawns. Métrica: `directorSpawns`. No incluye variantes élite ni patrones de encuentro.
+- `enemyScaling`: `{ damage, speed }` aplicado a todos los enemigos al crearlos.
+- `skilledBotFactory(habilidad)`: jugador guionado con puntería, giro y esquiva que mejoran con la habilidad. La observación incluye `projectiles` para que los bots puedan esquivar. Ver `docs/DIRECTOR.md`.
 
 ## Determinismo
 

@@ -27,6 +27,8 @@
     "bench:sim": "tsx scripts/bench-sim.ts",
     "bench:nav": "tsx scripts/bench-nav.ts",
     "bench:boss": "tsx scripts/bench-boss.ts",
+    "bench:director": "tsx scripts/bench-director.ts",
+    "bench:director-knobs": "tsx scripts/bench-director-knobs.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "runtime:info": "node scripts/runtime-info.mjs",
