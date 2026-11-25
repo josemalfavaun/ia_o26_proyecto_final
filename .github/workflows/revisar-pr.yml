@@ -1,0 +1,82 @@
+# El check obligatorio «revisar-entrega» de cada pull request.
+# 1. El PR solo toca UNA carpeta estudiantes/<tu_equipo>/ y quien lo abre está en su equipo.
+# 2. La carpeta pasa herramientas/revisar.py (archivos, proyecto.toml, bitácora, tamaños, secretos).
+# 3. En la entrega, la imagen de Docker se construye.
+# Corre con permisos de solo lectura y sin secretos (evento pull_request, nunca su variante «target»).
+name: Revisar entrega
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: revisar-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  revisar-entrega:
+    name: revisar-entrega
+    if: github.repository == 'raya-lucaria/ia_o26_proyecto_final'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      AUTOR: ${{ github.event.pull_request.user.login }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Revisar la carpeta
+        id: revisar
+        run: |
+          # El revisor se toma de main, no del PR: nadie puede cambiar sus propias reglas.
+          git show "$BASE_SHA:herramientas/revisar.py" >"$RUNNER_TEMP/revisar.py"
+          # Los nombres de archivo los elige el autor del PR: nada se interpreta como comando.
+          token="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+          echo "::stop-commands::$token"
+          ok=1
+          python3 "$RUNNER_TEMP/revisar.py" --pr --base "$BASE_SHA" --head "$HEAD_SHA" --autor "$AUTOR" || ok=0
+          echo "::$token::"
+          if ((!ok)); then
+            echo "::error::La carpeta no pasa la revisión. Lee el resumen del check (Summary) y arréglalo."
+            exit 1
+          fi
+
+      - name: Construir Docker (solo en la entrega)
+        if: steps.revisar.outputs.estado == 'entrega'
+        env:
+          EQUIPO: ${{ steps.revisar.outputs.equipo }}
+        working-directory: estudiantes/${{ steps.revisar.outputs.equipo }}
+        run: |
+          token="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+          echo "::stop-commands::$token"
+          ok=1
+          compose=""
+          for f in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
+            if [[ -f "$f" ]]; then compose="$f"; break; fi
+          done
+          if [[ -n "$compose" ]]; then
+            echo "Construyendo con $compose"
+            docker compose -f "$compose" config -q && docker compose -f "$compose" build || ok=0
+          else
+            echo "Construyendo el Dockerfile"
+            docker build -t "proyecto-$EQUIPO" . || ok=0
+          fi
+          echo "::$token::"
+          if ((ok)); then
+            echo "✅ La imagen de Docker se construye." >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ La imagen de Docker **no** se construye. Corre \`docker compose up --build\` en tu carpeta y arregla el error." >>"$GITHUB_STEP_SUMMARY"
+            echo "::error::La imagen de Docker no se construye. Revisa el log de este paso."
+            exit 1
+          fi

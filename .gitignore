@@ -1,0 +1,17 @@
+# Lo pesado y lo secreto se queda en la computadora de cada quien.
+datos/
+modelos/
+.env
+.env.*
+!.env.example
+
+# Dependencias y cachés
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+.ipynb_checkpoints/
+wandb/
+mlruns/
+.DS_Store
