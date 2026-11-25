@@ -5,6 +5,7 @@ import { decayEnemyFlinch } from './RaycastCombatFeel';
 import { castRay, type RaycastMap } from './RaycastMap';
 import { collides } from './RaycastMovement';
 import { isRaycastEnemyTelegraphing, type RaycastEnemy, type RaycastPlayerTarget } from './RaycastEnemy';
+import type { RaycastEnemyNavigator } from './RaycastEnemyNavigator';
 import {
   RAYCAST_ALERT_AFTER_LOSS_MS,
   RAYCAST_ALERT_ARRIVE_EPSILON,
@@ -61,6 +62,8 @@ export type { RaycastPlayerTarget } from './RaycastEnemy';
 export interface RaycastEnemyRuntimeModifiers {
   speedMultiplier?: number;
   projectileSpeedMultiplier?: number;
+  /** Opcional: navegación por rutas. Sin él, los enemigos se mueven con la regla original. */
+  navigator?: RaycastEnemyNavigator;
 }
 
 export function computeRaycastEnemyPlayerAwareness(
@@ -165,18 +168,28 @@ export function updateRaycastEnemies(
           enemy.lastSeenPlayerAt = 0;
         } else {
           const alertSpeed = (config.speed / GRID_SCALE) * 0.5;
-          const alertSteer = pickOpenRoamHeadingToward(
+          const plannedSteer = modifiers.navigator?.steer(
             map,
-            enemy.x,
-            enemy.y,
-            enemy.radius,
+            enemy,
+            enemies,
             enemy.lastKnownPlayerX,
-            enemy.lastKnownPlayerY
+            enemy.lastKnownPlayerY,
+            time
           );
+          const alertSteer = plannedSteer
+            ? 0
+            : pickOpenRoamHeadingToward(
+                map,
+                enemy.x,
+                enemy.y,
+                enemy.radius,
+                enemy.lastKnownPlayerX,
+                enemy.lastKnownPlayerY
+              );
           moveEnemy(
             map,
             enemy,
-            { x: Math.cos(alertSteer), y: Math.sin(alertSteer) },
+            plannedSteer ?? { x: Math.cos(alertSteer), y: Math.sin(alertSteer) },
             alertSpeed * (modifiers.speedMultiplier ?? 1) * (enemy.speedMultiplier ?? 1),
             deltaMs
           );
@@ -240,6 +253,11 @@ export function updateRaycastEnemies(
       enemy.attackWindupUntil = 0;
       const beforeX = enemy.x;
       const beforeY = enemy.y;
+      // Sin línea de visión la recta al jugador atraviesa paredes: con navegador se sigue una ruta planeada.
+      const plannedPrimary =
+        decision.action === 'CHASE' && !hasSight
+          ? modifiers.navigator?.steer(map, enemy, enemies, player.x, player.y, time) ?? undefined
+          : undefined;
       const steer = computeTacticalMoveDirection({
         enemy,
         enemies,
@@ -249,7 +267,8 @@ export function updateRaycastEnemies(
         profile,
         decision,
         time,
-        deltaMs
+        deltaMs,
+        primaryOverride: plannedPrimary
       });
       moveEnemy(
         map,

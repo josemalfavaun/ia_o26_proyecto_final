@@ -1,3 +1,4 @@
+import type { RaycastBossPolicy } from './RaycastBossPolicy';
 import type { BalanceProfile } from '../types/BalanceProfile';
 import type { WeaponKind } from '../systems/WeaponTypes';
 import { createProjectileSpawns } from '../systems/WeaponSystem';
@@ -90,7 +91,7 @@ export interface RaycastBossState {
   arenaLevelId?: string;
 }
 
-function telegraphMs(state: Pick<RaycastBossState, 'phase' | 'behavior'>): number {
+export function telegraphMs(state: Pick<RaycastBossState, 'phase' | 'behavior'>): number {
   if (state.behavior === 'ash-judge') {
     return state.phase === 1 ? 800 : state.phase === 2 ? 600 : 500;
   }
@@ -103,7 +104,7 @@ function telegraphMs(state: Pick<RaycastBossState, 'phase' | 'behavior'>): numbe
   return 500;
 }
 
-function cooldownMs(state: Pick<RaycastBossState, 'phase' | 'behavior' | 'health' | 'maxHealth'>): number {
+export function cooldownMs(state: Pick<RaycastBossState, 'phase' | 'behavior' | 'health' | 'maxHealth'>): number {
   let ms: number;
   if (state.behavior === 'ash-judge') {
     ms = state.phase === 1 ? 1680 : state.phase === 2 ? 1320 : 1040;
@@ -440,19 +441,19 @@ function fanAngles(base: number, count: number, spread: number): number[] {
   return out;
 }
 
-function getBossPelletColor(state: Pick<RaycastBossState, 'behavior'>): number {
+export function getBossPelletColor(state: Pick<RaycastBossState, 'behavior'>): number {
   if (state.behavior === 'bloom-warden') return BLOOM_WARDEN_PROJECTILE_COLOR;
   if (state.behavior === 'ash-judge') return ASH_JUDGE_PROJECTILE_COLOR;
   return BOSS_PROJECTILE_COLOR;
 }
 
-function getBossProjectileDamage(state: Pick<RaycastBossState, 'phase' | 'health' | 'maxHealth'>): number {
+export function getBossProjectileDamage(state: Pick<RaycastBossState, 'phase' | 'health' | 'maxHealth'>): number {
   const phaseDamageMul = state.phase === 3 ? PHASE_THREE_DAMAGE_MUL : state.phase === 2 ? PHASE_TWO_DAMAGE_MUL : 1;
   const desperationMul = isBossDesperation(state) ? 1.08 : 1;
   return Math.max(1, Math.round(BOSS_PROJECTILE_DAMAGE * phaseDamageMul * desperationMul));
 }
 
-function fireBossVolleyKind(
+export function fireBossVolleyKind(
   state: RaycastBossState,
   kind: BossVolleyKind,
   base: number,
@@ -576,7 +577,8 @@ export function tickRaycastBossVolleys(
   state: RaycastBossState,
   player: RaycastBossPlayerContext,
   time: number,
-  map: RaycastMap
+  map: RaycastMap,
+  policy?: RaycastBossPolicy
 ): RaycastEnemyProjectile[] {
   if (!state.alive || !player.alive) return [];
 
@@ -606,7 +608,7 @@ export function tickRaycastBossVolleys(
       desperation: isBossDesperation(state),
       timeSinceLastVolleyMs: Math.max(0, time - (state.nextVolleyReadyAt - cooldownMs(state)))
     };
-    state.pendingVolleyKind = pickBossVolleyKind(state, pickCtx);
+    state.pendingVolleyKind = policy?.pickVolley(state, player, map, pickCtx, time) ?? pickBossVolleyKind(state, pickCtx);
     state.telegraphUntil = time + telegraphMs(state);
     state.pendingVolleyAt = state.telegraphUntil;
     state.nextVolleyReadyAt = state.pendingVolleyAt + cooldownMs(state);

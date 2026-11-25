@@ -231,12 +231,16 @@ export interface TacticalMoveInput {
   decision: EnemyBehaviorDecision;
   time: number;
   deltaMs: number;
+  /** Dirección base ya planeada (por ejemplo, el siguiente tramo de una ruta). Sustituye la recta al jugador. */
+  primaryOverride?: MovementVector;
 }
 
 export function computeTacticalMoveDirection(input: TacticalMoveInput): MovementVector {
   const { enemy, enemies, player, map, profile, decision, time } = input;
   let primary =
-    decision.action === 'RETREAT' ? getDirection(player, enemy) : getDirection(enemy, player);
+    decision.action === 'RETREAT'
+      ? getDirection(player, enemy)
+      : (input.primaryOverride ?? getDirection(enemy, player));
 
   if (enemy.tacticalStuckMs >= RAYCAST_TACTICAL_STUCK_MS) {
     const escape = pickOpenRoamHeadingToward(map, enemy.x, enemy.y, enemy.radius, player.x, player.y);

@@ -33,6 +33,10 @@ export interface RaycastBossPlayerContext {
   stationaryMs?: number;
   vx?: number;
   vy?: number;
+  /** Vida actual del jugador. Opcional: solo la usan políticas que miden la presión que ya recibió. */
+  health?: number;
+  /** Daño acumulado recibido en el combate (monótono). Si existe, se prefiere sobre `health`. */
+  damageTaken?: number;
 }
 
 export interface BossMovementIntent {
@@ -153,7 +157,7 @@ export function resolveBossMoveSpeed(
   return speed * telegraphSlow;
 }
 
-function volleyCandidates(
+export function volleyCandidates(
   behavior: RaycastBossBehaviorId,
   phase: 1 | 2 | 3,
   ctx: BossVolleyPickContext
