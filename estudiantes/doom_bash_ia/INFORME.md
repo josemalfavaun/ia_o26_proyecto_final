@@ -190,7 +190,7 @@ original. Teclas `I`, `U`, `O` y parámetro `?ia=` de la URL; detalle y límites
 El bandido en el juego elige un brazo cuando aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si
 el jefe cae, guarda su creencia en el navegador y empieza otra ventana.
 
-**Qué se verificó.** Pruebas unitarias del runtime (11) y de todo el proyecto (714 en total). En el demo desplegado se
+**Qué se verificó.** Pruebas unitarias del runtime (11) y de todo el proyecto (790 en total, en 111 archivos). En el demo desplegado se
 comprobó que A\* planifica rutas (8 planes y 74 nodos en los primeros segundos), que el bandido elige un brazo al aparecer
 el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisión en vivo (1.15 ms por decisión).
 
@@ -207,6 +207,23 @@ el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisió
   `cross` empatados); en empate evita repetir el ataque anterior. No se consideró un error, pero tampoco se investigó
   más.
 
+### Otras partes del juego (no son un módulo medido)
+
+Además de los módulos medidos, el juego tiene piezas de presentación. No se midieron y no cambian los resultados de
+arriba; se declaran para que el código de esas carpetas no quede sin explicar:
+
+- **Fondo animado del menú** (`src/ai/runtime/attractAutopilot.ts`, `attractCombat.ts`). Una cámara recorre un nivel real
+  sin que nadie la maneje: elige una zona, calcula la ruta con el mismo `findPathAStar` que usan los enemigos y la sigue.
+  Es determinista (semilla fija). Es una demostración de A\* en pantalla, no un experimento.
+- **Pantallas del juego**: tutorial, prólogo, fin de partida, pausa y escena final de victoria; atajos de demo (`4` a `9`
+  y la tecla a la derecha del `0`) para llegar rápido a un nivel, a un jefe o a la escena final.
+- **Sprites de los tres jefes** (uno distinto por jefe, y dos a la vez en el tercero). Se generaron con un generador de
+  imágenes externo y se procesaron con un script (recorte, fondo transparente, tono de piel y proporciones); el código del
+  juego solo elige el cuadro según el estado del jefe.
+- **Velocidad de los dos jefes del tercer nivel de jefe.** Se acotó a 80 % de la velocidad máxima del jugador
+  (`tickDualBossCoordination` movía a los jefes a unos 17 casillas por segundo, 2.5 veces la del jugador). El simulador usa
+  un jefe por nivel y no ejecuta esa coordinación, por lo que las tablas de M2 y M3 no cambian.
+
 ## 8. Límites globales
 
 1. **Todos los jugadores son bots.** Cada conclusión vale para esos perfiles y no se extrapola a personas sin probar con
@@ -219,16 +236,24 @@ el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisió
 5. **Balance.** Activar A\* o la política de ritmo vuelve el juego más duro. Por eso todo arranca apagado.
 6. **Tamaño de muestra.** M3 tiene 80 semillas por celda (± 0.10) y 300 réplicas por sesión; las diferencias pequeñas
    entre selectores no son concluyentes.
+7. **Sensibilidad de M3 al balance del jefe.** Las tablas de M3 dependen de la velocidad de movimiento de `ash-judge`
+   (`THIRD_BOSS_FIGHT_SPEED_MULTIPLIER = 0.65`, que el simulador usa porque crea al jefe con el mismo nivel). Se midió qué
+   pasa si se baja a 0.455 (otro 30 % más lento, 80 semillas, mismo método): el mejor brazo único deja de ser `ritmo-4`
+   (0.35) y pasa a `ritmo-1` (0.37); Thompson cae a 0.30, epsilon-voraz a 0.33, UCB1 a 0.26, la regla original a 0.15 y el
+   oráculo a 0.39. Es decir, **un brazo fijo le gana a todos los selectores** y el techo de la personalización baja de 0.07
+   a 0.02. La conclusión "el bandido le gana a la regla original y al azar" se mantiene; "Thompson empata con un brazo fijo"
+   no. Por eso el valor se dejó en 0.65 y las tablas de este informe son las de ese valor. Detalle en
+   [`evidencia/2026-11-25-barrido-y-sensibilidad.md`](evidencia/2026-11-25-barrido-y-sensibilidad.md).
 
 ## 9. Cómo reproducir
 
 ```bash
 npm ci
-npm test                             # 101 archivos, 714 pruebas
+npm test                             # 111 archivos, 790 pruebas
 npm run bench:sim
 npm run bench:nav
 npm run bench:boss -- --seeds 40     # varios minutos
-npm run bench:director -- --rebuild  # poco más de un minuto
+npm run bench:director -- --rebuild  # poco más de un minuto; regenera resultados/ idénticos (verificado el 25-nov)
 npm run bench:director-knobs
 ```
 
@@ -239,6 +264,12 @@ Claude (Anthropic) como asistente de programación. José Malfavaun definió el 
 revisó el código y los resultados, ejecutó las pruebas y los benchmarks en su máquina, y hizo los commits con su propia
 cuenta. Las decisiones de qué reportar como resultado negativo (daño del jefe, perillas del director, flanqueo, bandido
 frente a epsilon-voraz) se tomaron para no ajustar los parámetros hasta que saliera un resultado favorable.
+
+Lo mismo aplica al trabajo posterior de presentación (pantallas, atajos, sprites, corrección de errores de arranque en
+frío y la medición de sensibilidad de la sección 8): lo hizo Claude como asistente de programación y José lo revisó,
+probó en el navegador y commiteó. Los sprites de los jefes se generaron con un generador de imágenes externo que José
+operó; Claude no genera imágenes y solo procesó los archivos que José produjo.
+
 
 ## 11. Créditos
 

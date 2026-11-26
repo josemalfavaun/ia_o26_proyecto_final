@@ -3,7 +3,7 @@
  *
  *   npm run bench:director                  # construye la tabla si no existe (varios minutos) y analiza
  *   npm run bench:director -- --rebuild     # fuerza reconstruir la tabla
- *   npm run bench:director -- --seeds 20    # semillas por celda de la tabla (60 por omisión)
+ *   npm run bench:director -- --seeds 20    # semillas por celda de la tabla (80 por omisión; el informe usa 80)
  *
  * 1. Tabla de desenlaces: jugador × brazo × semilla, con el simulador (ver src/ai/bandit/table.ts).
  * 2. Sesiones: cada jugador juega 80 encuentros seguidos con un selector de brazos; se repite en muchas réplicas.
@@ -36,7 +36,7 @@ function arg(name: string, fallback: number): number {
 const PRIOR_STRENGTH = 4;
 const LEVEL = 'ash-judge-seal';
 const WINDOW_MS = 40_000;
-const TABLE_SEEDS = arg('seeds', 60);
+const TABLE_SEEDS = arg('seeds', 80);
 const REPLICAS = arg('replicas', 300);
 const EPISODES = arg('episodes', 80);
 const PLAYERS: TablePlayer[] = [
