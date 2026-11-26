@@ -32,7 +32,7 @@ Sin Docker, para desarrollar (Node 22):
 ```bash
 npm ci
 npm run dev          # juego en http://localhost:5173
-npm test             # pruebas unitarias (vitest): 101 archivos, 714 pruebas
+npm test             # pruebas unitarias (vitest): 111 archivos, 790 pruebas
 npm run lint
 ```
 
@@ -48,6 +48,16 @@ Por omisión todo está apagado y el juego se comporta como el original. Se acti
 
 También con la URL: `?ia=astar,bandido` (acepta `astar`, `legacy`, `expectimax`, `bandido`, `regla`). Los modos y lo que
 aprende el bandido se guardan en el navegador. Detalles en [`docs/PANEL_IA.md`](docs/PANEL_IA.md).
+
+## Pantallas y atajos para la presentación
+
+| Dónde | Qué pasa |
+|---|---|
+| Menú y tutorial | El fondo es el motor real del juego jugando solo: un bot con A* recorre un nivel y dispara a los enemigos que le salen al paso (`src/ai/runtime/attractCombat.ts`); después pelea contra el jefe 1 con sus tres fases y vuelve a empezar. |
+| Pantalla de misión | Misión y objetivo del episodio, los 8 modificadores de la partida con su descripción (`↑`/`↓` o `M` para cambiar de modificador, `R` para sortear, `N` para ninguno) y los controles. |
+| Durante la partida | `ESC` abre el menú de pausa; `L` repite el objetivo de la misión; `G` pide una frase al narrador (necesita el narrador local de arriba encendido). |
+| Final | Al derrotar al último jefe, `N` lleva a la escena final: salida del complejo, amanecer, explosión en cadena y extracción. |
+| Demos rápidas | `4`/`5`/`6` saltan a los niveles 3/6/10, `7`/`8`/`9` a cada jefe y `-` abre la escena final. |
 
 ## Qué es IA hoy y qué se construyó
 

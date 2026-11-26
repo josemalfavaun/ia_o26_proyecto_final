@@ -1,0 +1,60 @@
+# Plantilla de despliegue de la demo en GitHub Pages desde el fork de José.
+# NO va dentro de estudiantes/ en el PR de entrega: se copia a .github/workflows/cd-pages-demo.yml en la rama `main`
+# de tu fork (josemalfavaun/ia_o26_proyecto_final). Pasos en docs/DEMO_EN_LINEA.md.
+name: Demo en GitHub Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Rama o SHA que se publica
+        default: entrega
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: estudiantes/doom_bash_ia/package-lock.json
+      - name: Instalar y probar
+        working-directory: estudiantes/doom_bash_ia
+        run: |
+          npm ci
+          npx vitest run
+      - name: Compilar con la ruta de Pages
+        working-directory: estudiantes/doom_bash_ia
+        env:
+          RAYCAST_RUNTIME_CHANNEL: preview
+          # La ruta es el nombre del repositorio, no el nombre del paquete.
+          BASE_PATH: /${{ github.event.repository.name }}/
+        run: node scripts/build-runtime.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: estudiantes/doom_bash_ia/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

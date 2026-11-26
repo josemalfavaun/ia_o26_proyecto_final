@@ -12,7 +12,9 @@ This document describes `src/game/` as oriented today: **`RaycastScene` is the m
 
 | Scene | Role |
 |-------|------|
-| `MenuScene` | Entry: start prologue, difficulty, settings, boss shortcuts. |
+| `MenuScene` | Entry: live autopilot background (`AttractBackground`), difficulty, settings, demo shortcuts (4/5/6 levels 3/6/10, 7/8/9 bosses, `-` victory). |
+| `TutorialScene` | Liquid-glass tutorial over the live background, shown before level 1 of a new game. |
+| `VictoryScene` | "MISIÓN CUMPLIDA" end screen with three original pixel-art variants (keys 1/2/3). |
 | `SettingsScene` | Session input prefs (gamepad/touch), persisted locally. |
 | `PrologueScene` | Terminal narrative beat before Episode 1. |
 | `RaycastScene` | Main FPS loop: raycast render pass, enemies, HUD, pause, minimap, boss, transitions between sectors/worlds. |

@@ -213,7 +213,7 @@ Los demás jugadores abren http://<ip>:5173, presionan M y escriben <ip>:3001. E
 
 ---
 
-Atajo de desarrollo: las teclas 4 / 5 / 6 saltan directamente al boss de World 1 / 2 / 3 (en coop, el servidor lleva a todos juntos). Es una herramienta de debug para pruebas; no forma parte del flujo normal de juego.
+Atajos de demo (actualizados en el semestre de IA): 4 / 5 / 6 saltan a los niveles 3 / 6 / 10 de la campaña normal; 7 / 8 / 9 saltan al primer, segundo y tercer jefe; la tecla a la derecha del 0 (`-`) abre la pantalla final "MISIÓN CUMPLIDA" (en ella, 1 / 2 / 3 cambian entre tres escenas de pixel-art). Son herramientas de demostración y prueba; no forman parte del flujo normal de juego. Antes (juego original), 4 / 5 / 6 saltaban a los jefes de World 1 / 2 / 3.
 
 ## Docker Quick Start (solo frontend)
 
