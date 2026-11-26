@@ -1,13 +1,23 @@
 import type { RaycastBossBehaviorId, RaycastBossState } from './RaycastBoss';
 import { isWallAt, type RaycastMap } from './RaycastMap';
+import { RAYCAST_MOVEMENT } from './RaycastMovement';
 
 /** HP ratio where desperation tactics kick in (independent of phase band). */
 export const BOSS_DESPERATION_HP_RATIO = 0.15;
 export const BOSS_INTRO_DURATION_MS = 2800;
 export const BOSS_PHASE3_SPEED_MUL = 0.7;
-/** Third boss fight (`ash-judge-seal`) only — movement 35% slower; not damage/HP/spawn. */
+/**
+ * Third boss fight (`ash-judge-seal`) only — chase movement 35% slower; not damage/HP/spawn.
+ * Do NOT change this without regenerating `resultados/` (`npm run bench:director -- --rebuild --seeds 80`):
+ * the simulator builds its bosses with this arena id, so the published M3 tables depend on this value.
+ * The visible "too fast" feel of the two bosses came from `tickDualBossCoordination`, capped below instead.
+ */
 export const THIRD_BOSS_FIGHT_LEVEL_ID = 'ash-judge-seal';
 export const THIRD_BOSS_FIGHT_SPEED_MULTIPLIER = 0.65;
+/** Third boss fight: neither boss may move faster than this fraction of the player's top speed (20% slower). */
+export const THIRD_BOSS_FIGHT_PLAYER_SPEED_RATIO = 0.8;
+/** Hard cap, in tiles per second, for each boss of the third fight (player 6.8 * 0.8 = 5.44). */
+export const THIRD_BOSS_FIGHT_MAX_SPEED = RAYCAST_MOVEMENT.maxSpeed * THIRD_BOSS_FIGHT_PLAYER_SPEED_RATIO;
 export const BOSS_KITING_AWAY_DOT = -0.28;
 export const BOSS_CORNER_WALL_PROBE = 0.42;
 
@@ -279,10 +289,21 @@ export function computeBossMovementIntent(
   };
 }
 
+/** Moves `boss` toward (tx, ty) by `lerp` of the gap, but never more than `maxStep` tiles. */
+function approachCapped(boss: RaycastBossState, tx: number, ty: number, lerp: number, maxStep: number): void {
+  const dx = (tx - boss.x) * lerp;
+  const dy = (ty - boss.y) * lerp;
+  const len = Math.hypot(dx, dy);
+  const k = len > maxStep && len > 0 ? maxStep / len : 1;
+  boss.x += dx * k;
+  boss.y += dy * k;
+}
+
 export function tickDualBossCoordination(
   bosses: readonly RaycastBossState[],
   player: Pick<RaycastBossPlayerContext, 'x' | 'y'>,
-  time: number
+  time: number,
+  deltaMs = 1000 / 60
 ): void {
   if (bosses.length < 2) return;
   const a = bosses[0];
@@ -314,10 +335,13 @@ export function tickDualBossCoordination(
   const targetCutY = player.y + flankY * cutRing * escapeBias;
 
   const lerp = 0.028;
-  presser.x += (targetPressX - presser.x) * lerp;
-  presser.y += (targetPressY - presser.y) * lerp;
-  cutter.x += (targetCutX - cutter.x) * lerp;
-  cutter.y += (targetCutY - cutter.y) * lerp;
+  // This pull used to be uncapped (17 tiles/s, 2.5x the player). Each boss also walks with its own chase speed
+  // (tickRaycastBossMovement), so the pull only gets what is left under the cap: total <= 80% of the player.
+  const dt = Math.max(0, Math.min(deltaMs, 100)) / 1000;
+  const pressStep = Math.max(0, THIRD_BOSS_FIGHT_MAX_SPEED - resolveBossMoveSpeed(presser, 1)) * dt;
+  const cutStep = Math.max(0, THIRD_BOSS_FIGHT_MAX_SPEED - resolveBossMoveSpeed(cutter, 1)) * dt;
+  approachCapped(presser, targetPressX, targetPressY, lerp, pressStep);
+  approachCapped(cutter, targetCutX, targetCutY, lerp, cutStep);
 
   SCRATCH_DUAL.x = cutter.x - presser.x;
   SCRATCH_DUAL.y = cutter.y - presser.y;

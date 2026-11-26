@@ -39,6 +39,11 @@ import {
 } from "./RaycastCombatFeel";
 import { RAYCAST_DEATH_BURST_MS } from "./RaycastCombatSystem";
 import type { RaycastBossState } from "./RaycastBoss";
+import {
+  getRaycastBossSpriteSetId,
+  raycastBossTextureKey,
+  selectRaycastBossSpriteState,
+} from "./raycastBossSprites";
 import { getRaycastBossVisualProfile } from "./RaycastBossVisual";
 import {
   getRaycastEnemyIdentity,
@@ -123,7 +128,8 @@ export class RaycastRenderer {
   private readonly weaponSprite: Phaser.GameObjects.Image;
   private readonly preparedWeaponTextureKeys = new Set<string>();
   private readonly preparedBossTextureKeys = new Set<string>();
-  private bossSprite: Phaser.GameObjects.Image | null = null;
+  /** Un sprite por jefe (en el nivel 10 pelean dos a la vez). */
+  private readonly bossSprites = new Map<string, Phaser.GameObjects.Image>();
   private readonly previousBossSpritePositions = new Map<
     string,
     { x: number; y: number }
@@ -174,6 +180,17 @@ export class RaycastRenderer {
         distance: 0,
       });
     }
+  }
+
+  /** Borra y oculta todo lo que este renderer dibuja; sirve para menús que alternan dos renderers. */
+  hideAll(): void {
+    this.graphics.clear();
+    this.weaponSprite.setVisible(false);
+    this.hideBossSprite();
+    this.activeEnemySpriteCount = 0;
+    this.hideUnusedEnemySprites();
+    this.activeBillboardSpriteCount = 0;
+    this.hideUnusedBillboardSprites();
   }
 
   render(
@@ -590,7 +607,7 @@ export class RaycastRenderer {
     time: number,
     atmosphere: RaycastAtmosphereRenderOptions,
   ): void {
-        if (!boss) {
+    if (!boss) {
       this.hideBossSprite();
       return;
     }
@@ -598,7 +615,7 @@ export class RaycastRenderer {
     const showDeathSprite = !boss.alive && time < boss.hitFlashUntil + 900;
 
     if (!boss.alive && !showDeathSprite) {
-      this.hideBossSprite();
+      this.hideBossSprite(boss.id);
       return;
     }
     const dx = boss.x - player.x;
@@ -607,7 +624,7 @@ export class RaycastRenderer {
     const angleToEnemy = Math.atan2(dy, dx);
     const angleDelta = normalizeAngle(angleToEnemy - player.angle);
         if (Math.abs(angleDelta) > this.config.fovRadians * 0.58) {
-      this.hideBossSprite();
+      this.hideBossSprite(boss.id);
       return;
     }
 
@@ -623,7 +640,7 @@ export class RaycastRenderer {
       correctedDistance >
       (this.depthBuffer[column] ?? Number.POSITIVE_INFINITY) + 0.08
     ) {
-      this.hideBossSprite();
+      this.hideBossSprite(boss.id);
       return;
     }
 
@@ -914,8 +931,13 @@ export class RaycastRenderer {
   }
 
 
-    private hideBossSprite(): void {
-    this.bossSprite?.setVisible(false);
+  /** Sin id oculta los sprites de todos los jefes; con id, solo el de ese jefe. */
+  private hideBossSprite(bossId?: string): void {
+    if (bossId === undefined) {
+      for (const sprite of this.bossSprites.values()) sprite.setVisible(false);
+      return;
+    }
+    this.bossSprites.get(bossId)?.setVisible(false);
   }
 
   private prepareBossTexture(textureKey: string): void {
@@ -927,56 +949,30 @@ export class RaycastRenderer {
     this.preparedBossTextureKeys.add(textureKey);
   }
 
-  private getBossSprite(textureKey: string): Phaser.GameObjects.Image {
-    if (!this.bossSprite) {
-      this.bossSprite = this.scene.add.image(0, 0, textureKey);
-      this.bossSprite.setOrigin(0.5, 0.5);
-      this.bossSprite.setVisible(false);
-      this.bossSprite.setDepth(6.8);
+  private getBossSprite(bossId: string, textureKey: string): Phaser.GameObjects.Image {
+    let sprite = this.bossSprites.get(bossId);
+    if (!sprite) {
+      sprite = this.scene.add.image(0, 0, textureKey);
+      sprite.setOrigin(0.5, 0.5);
+      sprite.setVisible(false);
+      sprite.setDepth(6.8);
+      this.bossSprites.set(bossId, sprite);
     }
 
-    return this.bossSprite;
+    return sprite;
   }
 
-  private getVoltArchonTextureKey(
-    boss: RaycastBossState,
-    time: number,
-  ): string | null {
-    if (boss.behavior !== "volt-archon") return null;
-
-    if (!boss.alive) return RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonDeath;
-
-    if (time < boss.hitFlashUntil) {
-      return RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonHurt;
-    }
-
-    const telegraphRemaining = boss.telegraphUntil - time;
-
-    if (telegraphRemaining > 0 && telegraphRemaining <= 180) {
-      return RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonAttack;
-    }
-
-    if (telegraphRemaining > 0) {
-      return RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonTelegraph;
-    }
+  private getBossTextureKey(boss: RaycastBossState, time: number): string | null {
+    const setId = getRaycastBossSpriteSetId(boss.id);
+    if (!setId) return null;
 
     const previous = this.previousBossSpritePositions.get(boss.id);
     const moved =
       previous !== undefined &&
       Math.hypot(boss.x - previous.x, boss.y - previous.y) > 0.002;
+    this.previousBossSpritePositions.set(boss.id, { x: boss.x, y: boss.y });
 
-    this.previousBossSpritePositions.set(boss.id, {
-      x: boss.x,
-      y: boss.y,
-    });
-
-    if (moved) {
-      return Math.floor(time / 180) % 2 === 0
-        ? RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonWalk1
-        : RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonWalk2;
-    }
-
-    return RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonIdle;
+    return raycastBossTextureKey(setId, selectRaycastBossSpriteState(boss, time, moved));
   }
 
   private drawBossSpriteIfAvailable(
@@ -987,14 +983,14 @@ export class RaycastRenderer {
     time: number,
     visibility: number,
   ): boolean {
-    const textureKey = this.getVoltArchonTextureKey(boss, time);
+    const textureKey = this.getBossTextureKey(boss, time);
 
     if (!textureKey) return false;
     if (!raycastTextureExists(this.scene, textureKey)) return false;
 
     this.prepareBossTexture(textureKey);
 
-    const sprite = this.getBossSprite(textureKey);
+    const sprite = this.getBossSprite(boss.id, textureKey);
     sprite.setTexture(textureKey);
 
     const frame = this.scene.textures.getFrame(textureKey);
@@ -1010,7 +1006,7 @@ export class RaycastRenderer {
       .setPosition(cx, cy + size * 0.04)
       .setDisplaySize(displayWidth * phasePulse, displayHeight * phasePulse)
       .setAlpha(Phaser.Math.Clamp(visibility, 0.38, 1))
-      .setDepth(6.8);
+      .setDepth(6.8 + Math.min(0.08, (size / 270) * 0.08)); // el jefe más cercano se dibuja delante
 
     if (boss.phase === 3) {
       sprite.setTint(0xffd6c0);

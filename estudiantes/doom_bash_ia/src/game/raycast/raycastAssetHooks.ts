@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import type { RaycastEnemy } from "./RaycastEnemy";
+import { raycastBossSpriteAssets } from "./raycastBossSprites";
 
 export type RaycastEnemySpriteState =
   | "idle"
@@ -114,36 +115,7 @@ const OPTIONAL_IMAGE_ASSETS = [
   path: "assets/raycast/players/heroe_skin.png",
 },
 
-  //UMAMI
-    // BOSS: VOLT ARCHON
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonIdle,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_idle.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonWalk1,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_walk_1.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonWalk2,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_walk_2.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonTelegraph,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_telegraph.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonAttack,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_attack.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonHurt,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_hurt.png",
-  },
-  {
-    key: RAYCAST_OPTIONAL_TEXTURE_KEYS.voltArchonDeath,
-    path: "assets/raycast/bosses/volt_archon/volt_archon_death.png",
-  },
+  // Los sprites de los jefes se cargan desde raycastBossSprites.ts (un conjunto por jefe).
   //TECHO
   {
   key: RAYCAST_OPTIONAL_TEXTURE_KEYS.ceiling01,
@@ -360,7 +332,7 @@ export function getRaycastTextureIfPresent(
 export function registerRaycastOptionalAssets(scene: Phaser.Scene): void {
   let queuedAsset = false;
 
-  for (const asset of OPTIONAL_IMAGE_ASSETS) {
+  for (const asset of [...OPTIONAL_IMAGE_ASSETS, ...raycastBossSpriteAssets()]) {
     if (!scene.textures.exists(asset.key)) {
       scene.load.image(asset.key, asset.path);
       queuedAsset = true;

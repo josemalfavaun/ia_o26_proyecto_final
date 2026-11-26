@@ -9,6 +9,7 @@ import {
   BOSS_DESPERATION_HP_RATIO,
   BOSS_PHASE3_SPEED_MUL,
   THIRD_BOSS_FIGHT_LEVEL_ID,
+  THIRD_BOSS_FIGHT_MAX_SPEED,
   THIRD_BOSS_FIGHT_SPEED_MULTIPLIER,
   computeBossMovementIntent,
   getBossBaseMoveSpeed,
@@ -21,6 +22,7 @@ import {
   tickDualBossCoordination
 } from '../game/raycast/RaycastBossAI';
 import { RAYCAST_MAP_BOSS } from '../game/raycast/RaycastMap';
+import { RAYCAST_MOVEMENT } from '../game/raycast/RaycastMovement';
 
 const CONFIG: RaycastBossConfig = {
   id: 'volt-archon',
@@ -56,6 +58,40 @@ describe('raycast boss ai', () => {
     const baseline = resolveBossMoveSpeed(otherFight, 1);
     expect(without).toBeCloseTo(baseline * THIRD_BOSS_FIGHT_SPEED_MULTIPLIER, 4);
     expect(THIRD_BOSS_FIGHT_SPEED_MULTIPLIER).toBe(0.65);
+  });
+
+  it('caps both third-fight bosses at 80% of the player top speed, at any frame rate', () => {
+    expect(THIRD_BOSS_FIGHT_MAX_SPEED).toBeCloseTo(RAYCAST_MOVEMENT.maxSpeed * 0.8, 6);
+    for (const fps of [30, 60, 144]) {
+      for (const phase of [1, 2, 3] as const) {
+        const mk = (id: string, x: number, y: number) => {
+          const boss = createRaycastBossState(
+            { ...CONFIG, id, x, y, hitRadius: 0.75, behavior: 'ash-judge' },
+            0,
+            { arenaLevelId: THIRD_BOSS_FIGHT_LEVEL_ID }
+          );
+          boss.phase = phase;
+          return boss;
+        };
+        const a = mk('a', 12, 4);
+        const b = mk('b', 12, 11);
+        const player = { x: 3, y: 7.5, alive: true };
+        const dt = 1000 / fps;
+        let t = 5000;
+        let peak = 0;
+        for (let i = 0; i < fps * 2; i += 1) {
+          const before = [{ x: a.x, y: a.y }, { x: b.x, y: b.y }];
+          tickRaycastBossMovement(a, RAYCAST_MAP_BOSS, player, dt, t);
+          tickRaycastBossMovement(b, RAYCAST_MAP_BOSS, player, dt, t);
+          tickDualBossCoordination([a, b], player, t, dt);
+          t += dt;
+          [a, b].forEach((boss, k) => {
+            peak = Math.max(peak, Math.hypot(boss.x - before[k].x, boss.y - before[k].y) / (dt / 1000));
+          });
+        }
+        expect(peak).toBeLessThanOrEqual(THIRD_BOSS_FIGHT_MAX_SPEED * 1.02);
+      }
+    }
   });
 
   it('detects kiting when player moves away', () => {
