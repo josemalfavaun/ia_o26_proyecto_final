@@ -17,3 +17,5 @@ coverage/
 src/**/*.js
 *.tsbuildinfo
 vitest.config.js
+.vercel
+.env.local
