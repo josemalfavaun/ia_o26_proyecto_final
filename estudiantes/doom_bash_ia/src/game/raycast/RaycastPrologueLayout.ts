@@ -1,117 +1,115 @@
-export const PROLOGUE_SAFE_MARGIN_PX = 64;
+export const PROLOGUE_SIDE_MARGIN_PX = 36;
+export const PROLOGUE_GRID_GAP_PX = 16;
+export const PROLOGUE_PANEL_PADDING_PX = 16;
 
-/** Estimated heights for bottom stack collision checks (px). */
-export const PROLOGUE_MODIFIER_BLOCK_EST_HEIGHT_PX = 108;
-export const PROLOGUE_PROMPT_TO_MODIFIER_GAP_PX = 28;
-/** Extra space between mission block and objective block (objective only moves down). */
-export const PROLOGUE_MISSION_TO_OBJECTIVE_GAP_SHORT_PX = 80;
-export const PROLOGUE_MISSION_TO_OBJECTIVE_GAP_PX = 96;
+export interface PrologueCell {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface PrologueScreenLayout {
   centerX: number;
-  contentWidth: number;
-  columnWidth: number;
   titleY: number;
-  missionX: number;
-  objectiveX: number;
-  controlsX: number;
-  missionY: number;
-  objectiveY: number;
-  controlsY: number;
-  modifierY: number;
-  promptY: number;
+  /** Los cuatro cuadrantes de la matriz 2x2 bajo el título. */
+  mission: PrologueCell;
+  objective: PrologueCell;
+  modifiers: PrologueCell;
+  controls: PrologueCell;
   gamepadY: number;
+  promptY: number;
   footerY: number;
-  twoColumn: boolean;
   fontTitle: string;
+  fontHeading: string;
   fontBody: string;
   fontSmall: string;
   fontPrompt: string;
 }
 
 /**
- * Bottom-anchored stack: modifiers → gamepad → ENTER/ESC → footer.
- * Main copy stays above the modifier block with safe margins (min 64px).
+ * Matriz 2x2 bajo el título:
+ *
+ *   MISIÓN        | OBJETIVO
+ *   MODIFICADORES | CONTROLES
+ *
+ * La fila de abajo es más alta porque los modificadores pueden llegar a cinco líneas.
+ * Abajo del todo van el estado del mando y la línea ENTER / ESC.
  */
 export function computePrologueScreenLayout(width: number, height: number): PrologueScreenLayout {
-  const short = height <= 560;
+  const short = height <= 480 || width <= 720;
   const centerX = width * 0.5;
-  const safeWidth = Math.max(320, width - PROLOGUE_SAFE_MARGIN_PX * 2);
-  const contentWidth = Math.min(safeWidth, 760);
-  const twoColumn = width >= 960 && height >= 520;
-  const columnGap = 48;
-  const columnWidth = twoColumn
-    ? Math.floor((contentWidth - columnGap) / 2)
-    : contentWidth;
 
-  const missionX = twoColumn ? centerX - (columnWidth + columnGap) * 0.5 : centerX;
-  const controlsX = twoColumn ? centerX + (columnWidth + columnGap) * 0.5 : centerX;
-  const objectiveX = missionX;
+  const titleY = Math.round(height * 0.045);
+  const gridTop = Math.round(height * (short ? 0.17 : 0.16));
+  const promptBlockH = short ? 22 : 26;
+  const promptY = height - Math.round(height * 0.03);
+  const gamepadY = promptY - promptBlockH - 8;
+  const gridBottom = gamepadY - 20;
 
-  const promptBlockH = short ? 44 : 50;
-  const gamepadH = 22;
-  const bottomGap = short ? 16 : 20;
+  const gridWidth = width - PROLOGUE_SIDE_MARGIN_PX * 2;
+  const cellWidth = Math.floor((gridWidth - PROLOGUE_GRID_GAP_PX) / 2);
+  const gridHeight = gridBottom - gridTop;
+  const usable = gridHeight - PROLOGUE_GRID_GAP_PX;
+  const topHeight = Math.floor(usable * 0.44);
+  const bottomHeight = usable - topHeight;
 
-  const promptY = height - PROLOGUE_SAFE_MARGIN_PX;
-  const gamepadY = promptY - promptBlockH - bottomGap;
-  const modifierBottomY = gamepadY - gamepadH - PROLOGUE_PROMPT_TO_MODIFIER_GAP_PX;
-  const modifierY = modifierBottomY - PROLOGUE_MODIFIER_BLOCK_EST_HEIGHT_PX;
-
-  const titleY = PROLOGUE_SAFE_MARGIN_PX;
-  const titleBlockH = short ? 42 : 52;
-  const sectionGap = short ? 22 : 28;
-  const missionY = titleY + titleBlockH + sectionGap;
-  const objectiveY = missionY + (short ? PROLOGUE_MISSION_TO_OBJECTIVE_GAP_SHORT_PX : PROLOGUE_MISSION_TO_OBJECTIVE_GAP_PX);
-  // Keep controls/modifiers/prompt anchored — only objective shifts down vs mission.
-  const controlsY = twoColumn ? missionY + 8 : missionY + (short ? 108 : 124);
+  const leftX = PROLOGUE_SIDE_MARGIN_PX;
+  const rightX = leftX + cellWidth + PROLOGUE_GRID_GAP_PX;
+  const bottomY = gridTop + topHeight + PROLOGUE_GRID_GAP_PX;
 
   return {
     centerX,
-    contentWidth,
-    columnWidth,
     titleY,
-    missionX,
-    objectiveX,
-    controlsX,
-    missionY,
-    objectiveY,
-    controlsY,
-    modifierY,
-    promptY,
+    mission: { x: leftX, y: gridTop, width: cellWidth, height: topHeight },
+    objective: { x: rightX, y: gridTop, width: cellWidth, height: topHeight },
+    modifiers: { x: leftX, y: bottomY, width: cellWidth, height: bottomHeight },
+    controls: { x: rightX, y: bottomY, width: cellWidth, height: bottomHeight },
     gamepadY,
-    footerY: height - 18,
-    twoColumn,
-    fontTitle: short ? '22px' : '26px',
-    fontBody: short ? '15px' : '17px',
-    fontSmall: short ? '13px' : '15px',
-    fontPrompt: short ? '14px' : '16px',
+    promptY,
+    footerY: height - 6,
+    fontTitle: short ? '20px' : '26px',
+    fontHeading: short ? '13px' : '15px',
+    fontBody: short ? '11px' : '13px',
+    fontSmall: short ? '11px' : '13px',
+    fontPrompt: short ? '12px' : '14px'
   };
 }
 
-/** True when modifier block sits above prompt instructions with required gap. */
-export function prologueModifierClearsPrompt(layout: PrologueScreenLayout): boolean {
-  const modifierBottom = layout.modifierY + PROLOGUE_MODIFIER_BLOCK_EST_HEIGHT_PX;
-  const promptTop = layout.promptY - (layout.fontPrompt === '14px' ? 44 : 50);
-  return modifierBottom + PROLOGUE_PROMPT_TO_MODIFIER_GAP_PX <= promptTop;
+/** Verdadero si los cuatro cuadrantes caben dentro del lienzo, sin traslaparse entre sí ni con el pie. */
+export function prologueGridIsConsistent(layout: PrologueScreenLayout, width: number): boolean {
+  const cells = [layout.mission, layout.objective, layout.modifiers, layout.controls];
+  const inside = cells.every((c) => c.x >= 0 && c.x + c.width <= width && c.y >= 0 && c.width > 0 && c.height > 0);
+  const aboveFooter = cells.every((c) => c.y + c.height < layout.gamepadY);
+  const sameColumns = layout.mission.x === layout.modifiers.x && layout.objective.x === layout.controls.x;
+  const sameRows = layout.mission.y === layout.objective.y && layout.modifiers.y === layout.controls.y;
+  const ordered =
+    layout.mission.x + layout.mission.width < layout.objective.x &&
+    layout.mission.y + layout.mission.height < layout.modifiers.y;
+  return inside && aboveFooter && sameColumns && sameRows && ordered;
 }
 
-export function buildPrologueModifierBlock(
-  modifierId: string | null,
-  getModifierById: (id: string | null) => { label: string; summary: string; details: string } | undefined | null,
-): string {
-  const selected = modifierId ? getModifierById(modifierId) : null;
-  if (!selected) {
-    return [
-      '// MODIFICADORES (OPCIONAL)',
-      'ACTIVO // NINGUNO',
-      'M cambiar  ·  R aleatorio  ·  N limpiar',
-    ].join('\n');
+export interface PrologueModifierRow {
+  /** null = "sin modificador". */
+  id: string | null;
+  text: string;
+  active: boolean;
+}
+
+export const PROLOGUE_MODIFIER_HINT = 'M / ↑ ↓ elegir  ·  R aleatorio  ·  N ninguno';
+export const PROLOGUE_MODIFIER_NAME_WIDTH = 18;
+
+/** Todas las opciones a la vez (una línea cada una); la activa lleva la marca ">". */
+export function buildPrologueModifierRows(
+  modifiers: ReadonlyArray<{ id: string; shortLabel: string; brief: string }>,
+  selectedId: string | null
+): PrologueModifierRow[] {
+  const rows: PrologueModifierRow[] = [
+    { id: null, text: `${selectedId === null ? '>' : ' '} ${'NINGUNO'.padEnd(PROLOGUE_MODIFIER_NAME_WIDTH)} Partida estándar, sin cambios`, active: selectedId === null }
+  ];
+  for (const m of modifiers) {
+    const active = m.id === selectedId;
+    rows.push({ id: m.id, text: `${active ? '>' : ' '} ${m.shortLabel.padEnd(PROLOGUE_MODIFIER_NAME_WIDTH)} ${m.brief}`, active });
   }
-  return [
-    '// MODIFICADORES (OPCIONAL)',
-    `ACTIVO // ${selected.label}`,
-    selected.summary,
-    selected.details,
-    'M cambiar  ·  R aleatorio  ·  N limpiar',
-  ].join('\n');
+  return rows;
 }

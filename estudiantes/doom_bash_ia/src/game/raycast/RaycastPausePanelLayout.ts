@@ -19,7 +19,7 @@ export function computeRaycastPausePanelLayout(
 ): RaycastPausePanelLayout {
   const short = viewWidth <= 720 || viewHeight <= 500;
   const panelWidth = Math.min(short ? 580 : 660, viewWidth - 40);
-  const panelHeight = Math.min(short ? 400 : 460, viewHeight - 48);
+  const panelHeight = Math.min(short ? 420 : 480, viewHeight - 48);
   const centerX = viewWidth * 0.5;
   const centerY = viewHeight * 0.5;
   const panelTop = centerY - panelHeight * 0.5;
@@ -32,7 +32,7 @@ export function computeRaycastPausePanelLayout(
     bodyWrapWidth: panelWidth - 40,
     titleY: panelTop + 12,
     bodyY: panelTop + 44,
-    fontSize: short ? '10px' : '11px',
-    lineSpacing: short ? 4 : 5,
+    fontSize: short ? '9px' : '10px',
+    lineSpacing: short ? 3 : 4,
   };
 }

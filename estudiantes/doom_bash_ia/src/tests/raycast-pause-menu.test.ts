@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computeRaycastPausePanelLayout } from '../game/raycast/RaycastPausePanelLayout';
 import {
   formatRaycastControlPauseBody,
   formatRaycastPauseMenuMxBody,
@@ -9,7 +10,7 @@ import {
 } from '../game/raycast/RaycastPauseMenu';
 
 describe('raycast pause menu formatting', () => {
-  it('lays out two columns, single-line controls, and menu cursor', () => {
+  it('shows the full mission, single-line controls, a two-column menu and the cursor', () => {
     const body = formatRaycastPauseMenuMxBody({
       activeInput: 'keyboard_mouse',
       volumePct: 80,
@@ -29,7 +30,8 @@ describe('raycast pause menu formatting', () => {
     expect(body).toContain('VOLUMEN 80%');
     expect(body).toContain('// PARTIDA');
     expect(body).toContain('// OBJETIVO');
-    expect(body).toContain('│');
+    expect(body).toContain('// MISIÓN');
+    expect(body).toContain('Explora y exfiltra');
     expect(body).toContain('CONTROLES');
     expect(body).toContain('Entrada activa: teclado/mouse');
     expect(body).toContain('WASD · mover');
@@ -41,6 +43,19 @@ describe('raycast pause menu formatting', () => {
     expect(body).toContain(`> ${RAYCAST_PAUSE_MENU_LABELS[2]}`);
     expect(body).toContain(`  ${RAYCAST_PAUSE_MENU_LABELS[0]}`);
     expect(RAYCAST_PAUSE_MENU_LABELS.length).toBe(9);
+    // Cabe en el panel: pocas líneas y ninguna más ancha que lo que admite el panel.
+    const lines = body.split('\n');
+    expect(lines.length).toBeLessThanOrEqual(28);
+    expect(Math.max(...lines.map((l) => l.length))).toBeLessThanOrEqual(100);
+    // Cada bloque va separado del anterior por una línea en blanco, para que los párrafos se vean definidos.
+    lines.forEach((line, i) => {
+      if (line.startsWith('// ') && i > 0) expect(lines[i - 1]).toBe('');
+    });
+    // Y el cuerpo cabe en el alto del panel con la letra de 10 px y su interlineado.
+    const layout = computeRaycastPausePanelLayout(960, 540);
+    const lineHeight = parseInt(layout.fontSize, 10) * 1.25 + layout.lineSpacing;
+    expect(lines.length * lineHeight).toBeLessThanOrEqual(layout.panelHeight - (layout.bodyY - (layout.centerY - layout.panelHeight / 2)) - 10);
+    expect(RAYCAST_PAUSE_MENU_LABELS.every((label) => body.includes(label))).toBe(true);
     expect(body).toContain('// MENÚ');
   });
 

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildRaycastDeathOverlayHint,
-  buildRaycastDeathOverlaySummary,
+  buildRaycastDeathGlassModel,
   buildRaycastDifficultyMenuLine,
   buildMainMenuLayout,
   buildRaycastEpisodeBanner,
@@ -41,11 +40,27 @@ describe('raycast presentation helpers', () => {
     expect(banner).not.toContain('MOVE WASD');
   });
 
-  it('frames death overlay copy separately from sector-clear summaries', () => {
-    const lines = buildRaycastDeathOverlaySummary('SECTOR 2/6 TEST');
-    expect(lines[0]).toContain('ENLACE');
-    expect(lines.join('\n')).toContain('SECTOR 2/6 TEST');
-    expect(buildRaycastDeathOverlayHint()).toContain('REINTENTAR');
+  it('la pantalla de muerte dice FIN DE LA PARTIDA y resume en tres cifras', () => {
+    const model = buildRaycastDeathGlassModel({
+      levelDisplayLine: 'SECTOR 2/6 TEST',
+      elapsedMs: 83_400,
+      enemiesKilled: 12,
+      score: 1840.4
+    });
+    expect(model.title).toBe('FIN DE LA PARTIDA');
+    expect(model.levelLine).toBe('SECTOR 2/6 TEST');
+    expect(model.subtitle.length).toBeLessThan(70);
+    expect(model.stats).toEqual([
+      { label: 'TIEMPO', value: '01:23' },
+      { label: 'BAJAS', value: '12' },
+      { label: 'PUNTAJE', value: '1840' }
+    ]);
+  });
+
+  it('la pantalla de muerte no muestra cifras negativas', () => {
+    const model = buildRaycastDeathGlassModel({ levelDisplayLine: 'X', elapsedMs: -10, enemiesKilled: 0, score: -50 });
+    expect(model.stats[0].value).toBe('00:00');
+    expect(model.stats[2].value).toBe('0');
   });
 
   it('builds a World 3 banner when the meridian arc is active', () => {
@@ -89,7 +104,7 @@ describe('raycast presentation helpers', () => {
         canAdvance: false,
         episodeComplete: true
       })
-    ).toBe('R REPETIR FINAL  |  ESC MENÚ');
+    ).toBe('N VER FINAL  |  R REPETIR  |  ESC MENÚ');
 
     expect(
       buildRaycastOverlayHint({
@@ -99,7 +114,7 @@ describe('raycast presentation helpers', () => {
         finaleBossCleared: true,
         worldTwoLocked: true
       })
-    ).toBe('W MUNDO 2 (BLOQUEADO)  |  R REPETIR JEFE  |  ESC MENÚ');
+    ).toBe('W MUNDO 2 (BLOQUEADO)  |  N FINAL  |  R REPETIR JEFE  |  ESC MENÚ');
 
     expect(
       buildRaycastOverlayHint({
@@ -108,7 +123,7 @@ describe('raycast presentation helpers', () => {
         episodeComplete: true,
         masteryUnlocked: true
       })
-    ).toBe('SEÑAL VERDADERA DESBLOQUEADA  |  R REPETIR FINAL  |  ESC MENÚ');
+    ).toBe('SEÑAL VERDADERA DESBLOQUEADA  |  N FINAL  |  R REPETIR  |  ESC MENÚ');
   });
 
   it('builds normal vs mastery ending footer lines compactly', () => {
@@ -285,29 +300,30 @@ describe('raycast presentation helpers', () => {
     });
   });
 
-  it('exposes the boot menu title and single start line', () => {
+  it('exposes the boot menu title with the IA subtitle and no start/hint lines', () => {
     const copy = getMainMenuCopy();
 
     expect(copy.title).toBe('DOOM BIN BASH EDITION');
-    expect(copy.press3d).toBe('A / CLICK — INICIAR SECTOR 3D');
-    expect(copy.subtitle).toContain('RAYCAST');
+    expect(copy.subtitle).toBe('with IA');
     expect(copy.footerCredit).toBe('A Doom Bin Bash Project');
-    expect(copy.footerInputHints).toContain('A iniciar');
-    expect(copy.footerInputHints).toContain('Start iniciar');
     expect(copy.footerCredit).not.toMatch(/Hotzh3/i);
+    expect(Object.keys(copy)).not.toContain('press3d');
+    expect(Object.keys(copy)).not.toContain('footerInputHints');
+    expect(JSON.stringify(copy)).not.toMatch(/RAYCAST|PROTOCOL STRIP|INICIAR SECTOR/);
   });
 
-  it('keeps the main menu layout ordered title then start option', () => {
+  it('keeps the main menu layout ordered title, subtitle, settings and difficulty in the bottom-right corner', () => {
     const layout = buildMainMenuLayout(960, 540);
 
     expect(layout.centerX).toBe(480);
     expect(layout.titleY).toBeLessThan(layout.subtitleY);
-    expect(layout.subtitleY).toBeLessThan(layout.option3dY);
-    expect(layout.option3dY).toBeLessThan(layout.difficultyY);
-    expect(layout.difficultyY).toBeLessThan(layout.settingsY);
-    expect(layout.titleFrameCenterY).toBeLessThan(layout.titleY);
-    expect(layout.footerHintsY).toBeGreaterThan(0);
-    expect(layout.footerMaxWidth).toBeGreaterThan(200);
+    expect(layout.subtitleY).toBeLessThan(layout.settingsY);
+    expect(layout.titleFrameCenterY).toBeGreaterThan(layout.titleY);
+    expect(layout.titleFrameCenterY).toBeLessThan(layout.subtitleY);
+    expect(layout.difficultyX).toBeGreaterThan(layout.centerX);
+    expect(layout.difficultyY).toBeGreaterThan(layout.settingsY);
+    expect(layout.difficultyX).toBeLessThanOrEqual(960);
+    expect(layout.difficultyY).toBeLessThanOrEqual(540);
   });
 
   it('keeps main menu vertical ordering on compact viewports', () => {
@@ -320,10 +336,10 @@ describe('raycast presentation helpers', () => {
 
     for (const { width, height } of layouts) {
       const layout = buildMainMenuLayout(width, height);
-      expect(layout.titleY).toBeLessThan(layout.option3dY);
-      expect(layout.settingsY).toBeLessThan(layout.footerHintsY);
-      expect(layout.footerHintsY).toBeLessThanOrEqual(height - 20);
-      expect(layout.footerMaxWidth).toBeLessThanOrEqual(width - 40);
+      expect(layout.titleY).toBeLessThan(layout.subtitleY);
+      expect(layout.settingsY).toBeLessThan(layout.difficultyY);
+      expect(layout.difficultyX).toBeLessThanOrEqual(width - 12);
+      expect(layout.difficultyY).toBeLessThanOrEqual(height - 12);
     }
   });
 });

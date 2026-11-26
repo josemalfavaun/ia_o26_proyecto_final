@@ -5,6 +5,8 @@ import { PrologueScene } from './scenes/PrologueScene';
 import { RaycastScene } from './scenes/RaycastScene';
 import { RaycastWorldLockedScene } from './scenes/RaycastWorldLockedScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { TutorialScene } from './scenes/TutorialScene';
+import { VictoryScene } from './scenes/VictoryScene';
 
 export { GAME_HEIGHT, GAME_WIDTH } from './dimensions';
 
@@ -19,5 +21,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   physics: { default: 'arcade', arcade: { debug: false } },
-  scene: [MenuScene, SettingsScene, PrologueScene, RaycastScene, RaycastWorldLockedScene]
+  scene: [MenuScene, SettingsScene, PrologueScene, TutorialScene, RaycastScene, RaycastWorldLockedScene, VictoryScene]
 };

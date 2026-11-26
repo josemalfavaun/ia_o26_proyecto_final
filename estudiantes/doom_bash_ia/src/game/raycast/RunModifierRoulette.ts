@@ -11,6 +11,10 @@ export type RunModifierId =
 export interface RunModifier {
   id: RunModifierId;
   label: string;
+  /** Nombre corto para listas (pantalla de misión). */
+  shortLabel: string;
+  /** Una sola línea con lo que hace, para listas. */
+  brief: string;
   summary: string;
   details: string;
   effects: {
@@ -38,6 +42,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'DOUBLE_DAMAGE_LOW_HP',
     label: 'DOBLE DAÑO / VIDA BAJA',
+    shortLabel: 'DOBLE DAÑO',
+    brief: 'x2 daño tuyo, -35% vida máx., +25% puntaje',
     summary: 'Pegas mucho más fuerte, pero con menos vida máxima.',
     details: '+100% daño del jugador, -35% vida máxima, +25% de puntaje.',
     effects: { playerDamageMul: 2, playerMaxHealthMul: 0.65, scoreMul: 1.25 }
@@ -45,6 +51,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'FAST_ENEMIES_MORE_SCORE',
     label: 'ENEMIGOS RÁPIDOS / MÁS PUNTAJE',
+    shortLabel: 'ENEMIGOS RÁPIDOS',
+    brief: 'Enemigos +18% veloces, +30% puntaje',
     summary: 'Los enemigos se mueven más rápido y sube el puntaje.',
     details: '+18% velocidad enemiga, +30% de puntaje.',
     effects: { enemySpeedMul: 1.18, scoreMul: 1.3 }
@@ -52,6 +60,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'NO_REGEN_HIGHER_RANK_BONUS',
     label: 'SIN REGEN / BONO DE RANGO',
+    shortLabel: 'SIN REGEN',
+    brief: 'Sin curación pasiva, +55% bono de rango',
     summary: 'Sin curación pasiva, pero mejor premio de rango.',
     details: 'Regen pasiva desactivada, +55% bono de rango/campaña.',
     effects: { passiveHealMul: 0, rankBonusMul: 1.55 }
@@ -59,6 +69,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'GLASS_CANNON',
     label: 'CAÑÓN DE CRISTAL',
+    shortLabel: 'CAÑÓN DE CRISTAL',
+    brief: '+45% tu daño, +35% daño enemigo, +20% puntaje',
     summary: 'Ambos lados hacen más daño.',
     details: '+45% daño del jugador, +35% daño enemigo, +20% de puntaje.',
     effects: { playerDamageMul: 1.45, enemyDamageMul: 1.35, scoreMul: 1.2 }
@@ -66,6 +78,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'TREASURE_SIGNAL',
     label: 'SEÑAL DE TESORO',
+    shortLabel: 'SEÑAL DE TESORO',
+    brief: 'Secretos y llaves valen más; más emboscadas',
     summary: 'Secretos/llaves valen más, pero suben emboscadas.',
     details: '+80% puntaje de secretos, +120 bono de llaves, +18% presión de spawns.',
     effects: { secretScoreMul: 1.8, tokenScoreBonus: 120, spawnPressureMul: 1.18 }
@@ -73,6 +87,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'OVERCLOCKED',
     label: 'SOBREACELERADO',
+    shortLabel: 'SOBREACELERADO',
+    brief: '+12% mov., +18% cadencia, regen más lenta',
     summary: 'Te mueves y disparas más rápido, pero la regen tarda más.',
     details: '+12% movimiento, +18% cadencia, +60% retraso de regen.',
     effects: { moveSpeedMul: 1.12, fireRateMul: 1.18, passiveHealDelayMul: 1.6 }
@@ -80,6 +96,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'HUNTER_MARK',
     label: 'MARCA DEL CAZADOR',
+    shortLabel: 'MARCA DEL CAZADOR',
+    brief: 'Más enemigos élite, +28% puntaje',
     summary: 'Aparecen más élites y sube el puntaje.',
     details: '+22% tasa de élites, +28% de puntaje.',
     effects: { eliteRateBonus: 0.22, scoreMul: 1.28 }
@@ -87,6 +105,8 @@ export const RUN_MODIFIER_ROULETTE: readonly RunModifier[] = [
   {
     id: 'DARK_ROUTE',
     label: 'RUTA OSCURA',
+    shortLabel: 'RUTA OSCURA',
+    brief: 'Más niebla y oscuridad, +35% bono de limpieza',
     summary: 'Más niebla/oscuridad a cambio de mayor bono de limpieza.',
     details: 'Niebla más densa + escenas más oscuras, +35% bono de desempeño.',
     effects: { fogMul: 0.82, darknessAdd: 0.06, clearBonusMul: 1.35 }

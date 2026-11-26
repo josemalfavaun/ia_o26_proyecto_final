@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRaycastHudLayout } from '../game/raycast/RaycastHud';
 import { buildRaycastNarrationLayoutFromHud } from '../game/raycast/RaycastNarration';
 import {
+  RADIO_MINIMAP_GAP,
   paginateRadioTransmissionText,
   computeRadioTypewriterText,
   sanitizeRadioDisplayText,
@@ -12,6 +13,9 @@ describe('raycast radio transmission', () => {
     const hud = buildRaycastHudLayout(1440, 900);
     const layout = buildRaycastNarrationLayoutFromHud(hud);
     expect(layout.originY).toBeGreaterThan(hud.minimapPanelY + hud.minimapPanelHeight);
+    const frameBottom = hud.minimapFrameY + hud.minimapFrameHeight * 0.5;
+    expect(layout.originY - frameBottom).toBeGreaterThanOrEqual(RADIO_MINIMAP_GAP);
+    expect(layout.originX).toBe(hud.minimapFrameX - hud.minimapFrameWidth * 0.5);
     expect(layout.originX).toBeLessThan(120);
     expect(layout.panelHeight).toBeLessThanOrEqual(72);
   });

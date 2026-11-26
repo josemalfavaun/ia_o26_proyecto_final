@@ -83,6 +83,8 @@ import {
   type RaycastMinimapEnemyBlip,
   type RaycastMinimapMarker
 } from '../raycast/RaycastMinimap';
+import { GlassOverlay } from '../ui/GlassOverlay';
+import { buildDeathTerminalHtml, ensureTerminalDeathStyles } from '../ui/terminalDeath';
 import { registerRaycastOptionalAssets } from '../raycast/raycastAssetHooks';
 import {
   addRaycastBossClearScore,
@@ -210,8 +212,7 @@ import {
   type RaycastDifficultyId
 } from '../raycast/RaycastDifficulty';
 import {
-  buildRaycastDeathOverlayHint,
-  buildRaycastDeathOverlaySummary,
+  buildRaycastDeathGlassModel,
   buildRaycastEpisodeBanner,
   buildRaycastHelpOverlayText,
   buildRaycastLevelStartObjectiveMessage,
@@ -311,7 +312,7 @@ import {
 } from '../raycast/RaycastInputHelp';
 import { formatGameMasterHudStatusLine } from '../raycast/GameMasterHudStatus';
 import { getBillboardColor } from '../raycast/RaycastVisualTheme';
-import { getRaycastBossLevelId, resolveRaycastBossShortcutLevelId, type RaycastBossShortcutSlot } from '../raycast/RaycastBossShortcuts';
+import { resolveRaycastDemoShortcut } from '../raycast/RaycastBossShortcuts';
 import { RaycastGamepadInput } from '../systems/RaycastGamepadInput';
 import { RaycastTouchInput } from '../systems/RaycastTouchInput';
 import { palette } from '../theme/palette';
@@ -564,6 +565,7 @@ export class RaycastScene extends Phaser.Scene {
   private finalTitleText!: Phaser.GameObjects.Text;
   private finalSummaryText!: Phaser.GameObjects.Text;
   private finalHintText!: Phaser.GameObjects.Text;
+  private deathGlass: GlassOverlay | null = null;
   private weaponOverlayFlashUntil = 0;
   private combatFeelState: CombatFeelRuntimeState = createCombatFeelRuntimeState();
   private freezeFrameUntil = 0;
@@ -639,6 +641,12 @@ export class RaycastScene extends Phaser.Scene {
     if (this.gamePaused) return;
     // In co-op, the server drives level transitions via the levelChange event — do not restart locally.
     if (this.netConnected) return;
+    // Final de la campaña: tras el resumen, N lleva a la pantalla "MISIÓN CUMPLIDA".
+    if (this.levelComplete && this.episodeComplete) {
+      this.stopGameMasterPresentation('campaign_victory');
+      this.scene.start('VictoryScene', { returnTo: 'MenuScene' });
+      return;
+    }
     if (!this.levelComplete || this.episodeComplete || this.nextLevelId === null) return;
     const nextId = this.nextLevelId;
     const breachWorldTwo =
@@ -812,17 +820,6 @@ export class RaycastScene extends Phaser.Scene {
     return true;
   }
 
-  private readonly handleDevBossShortcut = (event: KeyboardEvent): void => {
-    const levelId = resolveRaycastBossShortcutLevelId(event);
-    if (!levelId) return;
-    const now = this.time.now;
-    if (now - this.lastDevShortcutAt < 140) return;
-    this.lastDevShortcutAt = now;
-    const world2BossId = RAYCAST_WORLD_TWO_CATALOG.find((level) => level.id === 'bloom-warden-pit')?.id;
-    const label = levelId === RAYCAST_LEVEL_BOSS.id ? 'Jefe Mundo 1' : levelId === world2BossId ? 'Jefe Mundo 2' : 'Jefe Mundo 3';
-    this.handleDevJumpToLevel(levelId, label);
-  };
-
   private readonly handleDevShiftJ = (event: KeyboardEvent): void => {
     if (!DEV_SHORTCUT_ENABLED) return;
     if (!event.shiftKey) return;
@@ -831,32 +828,34 @@ export class RaycastScene extends Phaser.Scene {
     this.handleDevJumpToLevel(world3Boss.id, 'World 3 Boss');
   };
 
-  private jumpToBossArena(slot: RaycastBossShortcutSlot): void {
+  /**
+   * Atajos de demo (también en la versión publicada): 4/5/6 = niveles 3/6/10, 7/8/9 = jefes 1/2/3 y la tecla a la
+   * derecha del 0 = pantalla final. Los niveles arrancan una corrida limpia (puntaje en cero).
+   */
+  private readonly handleDemoShortcut = (event: KeyboardEvent): void => {
     if (!this.isRaycastSceneActive()) return;
-    const levelId = getRaycastBossLevelId(slot);
-    // DEBUG: in co-op, ask the server to jump everyone (preserves the
-    // live WebSocket). Remove or gate before shipping.
-    if (this.requestDebugJumpToLevel(levelId)) return;
+    const shortcut = resolveRaycastDemoShortcut(event);
+    if (!shortcut) return;
+    const now = this.time.now;
+    if (now - this.lastDevShortcutAt < 140) return;
+    this.lastDevShortcutAt = now;
+
+    if (shortcut.kind === 'victory') {
+      // En co-op no salimos de la partida: eso cerraría el WebSocket de todos.
+      if (this.netConnected) return;
+      this.scene.start('VictoryScene', { returnTo: 'MenuScene' });
+      return;
+    }
+    // En co-op el servidor mueve a todos con un solo mensaje (conserva el WebSocket).
+    if (this.requestDebugJumpToLevel(shortcut.levelId)) return;
     this.scene.restart({
-      levelId,
+      levelId: shortcut.levelId,
       difficultyId: this.difficultyId,
       carryScore: 0,
       carryCampaignMetrics: createEmptyCampaignMetrics(),
       rewardTier: 0,
       runModifierId: this.runModifier?.id ?? null
     });
-  }
-
-  private readonly handleBossShortcutOne = (): void => {
-    this.jumpToBossArena(1);
-  };
-
-  private readonly handleBossShortcutTwo = (): void => {
-    this.jumpToBossArena(2);
-  };
-
-  private readonly handleBossShortcutThree = (): void => {
-    this.jumpToBossArena(3);
   };
 
   private readonly handleEscKey = (): void => {
@@ -1097,6 +1096,7 @@ export class RaycastScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.deathGlass = null;
     registerRaycastOptionalAssets(this);
     prepareGameSession(this.registry);
     this.applyPerformanceSettings();
@@ -1541,8 +1541,8 @@ export class RaycastScene extends Phaser.Scene {
       .setVisible(false);
     const pauseLayout = computeRaycastPausePanelLayout(this.scale.width, this.scale.height);
     this.pausePanel = this.add
-      .rectangle(pauseLayout.centerX, pauseLayout.centerY, pauseLayout.panelWidth, pauseLayout.panelHeight, 0x050810, 0.93)
-      .setStrokeStyle(1, 0x334858, 0.72)
+      .rectangle(pauseLayout.centerX, pauseLayout.centerY, pauseLayout.panelWidth, pauseLayout.panelHeight, 0x010a04, 0.94)
+      .setStrokeStyle(3, 0x4dff7c, 0.9)
       .setDepth(41)
       .setVisible(false);
     this.pauseTitleText = this.add
@@ -1847,8 +1847,7 @@ export class RaycastScene extends Phaser.Scene {
       if (this.gamePaused) {
         this.handlePauseMenuConfirm();
       } else if (this.levelComplete) {
-        if (!this.episodeComplete && this.nextLevelId !== null) this.handleAdvanceLevel();
-        else this.restartCurrentLevel();
+        this.handleAdvanceLevel();
       }
     }
 
@@ -1925,8 +1924,7 @@ export class RaycastScene extends Phaser.Scene {
       if (this.gamePaused) {
         this.handlePauseMenuConfirm();
       } else if (this.levelComplete) {
-        if (!this.episodeComplete && this.nextLevelId !== null) this.handleAdvanceLevel();
-        else this.restartCurrentLevel();
+        this.handleAdvanceLevel();
       }
     }
 
@@ -2058,7 +2056,8 @@ export class RaycastScene extends Phaser.Scene {
       const intro = getBossIntroCopy(this.currentLevel.bossConfig.displayName, behavior);
       this.bossIntroUntil = this.time.now + BOSS_INTRO_DURATION_MS;
       this.setCombatMessage(`${intro.title} // ${intro.subtitle}`, BOSS_INTRO_DURATION_MS);
-      this.audioFeedback.play('bossPhaseShift', 0.72, this.time.now);
+      // `audioFeedback` se crea más adelante en `create`: en la primera partida tras cargar la página aún no existe.
+      this.audioFeedback?.play('bossPhaseShift', 0.72, this.time.now);
       this.cameras.main.setZoom(1.07);
       this.tweens.add({
         targets: this.cameras.main,
@@ -2096,13 +2095,10 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.on('keydown-M', this.handleToggleMinimap);
     keyboard?.on('keydown-H', this.handleToggleHelp);
     keyboard?.on('keydown-SLASH', this.handleHelpShortcut);
+    keyboard?.on('keydown', this.handleDemoShortcut);
     if (DEV_SHORTCUT_ENABLED) {
-      keyboard?.on('keydown', this.handleDevBossShortcut);
       keyboard?.on('keydown-J', this.handleDevShiftJ);
     }
-    keyboard?.on('keydown-FOUR', this.handleBossShortcutOne);
-    keyboard?.on('keydown-FIVE', this.handleBossShortcutTwo);
-    keyboard?.on('keydown-SIX', this.handleBossShortcutThree);
     keyboard?.on('keydown-TAB', this.handleToggleDebug);
     keyboard?.on('keydown-BACKTICK', this.handleToggleDebug);
     keyboard?.on('keydown-F3', this.handleToggleDebug);
@@ -2217,13 +2213,10 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.off('keydown-M', this.handleToggleMinimap);
     keyboard?.off('keydown-H', this.handleToggleHelp);
     keyboard?.off('keydown-SLASH', this.handleHelpShortcut);
+    keyboard?.off('keydown', this.handleDemoShortcut);
     if (DEV_SHORTCUT_ENABLED) {
-      keyboard?.off('keydown', this.handleDevBossShortcut);
       keyboard?.off('keydown-J', this.handleDevShiftJ);
     }
-    keyboard?.off('keydown-FOUR', this.handleBossShortcutOne);
-    keyboard?.off('keydown-FIVE', this.handleBossShortcutTwo);
-    keyboard?.off('keydown-SIX', this.handleBossShortcutThree);
     keyboard?.off('keydown-TAB', this.handleToggleDebug);
     keyboard?.off('keydown-BACKTICK', this.handleToggleDebug);
     keyboard?.off('keydown-F3', this.handleToggleDebug);
@@ -2644,6 +2637,9 @@ export class RaycastScene extends Phaser.Scene {
   private setCombatMessage(message: string, holdMs = 1100): void {
     this.lastCombatMessage = message.toUpperCase();
     this.combatMessageUntil = this.time.now + holdMs;
+    // `resetRuntimeState` puede mandar el mensaje de intro de un jefe antes de que `create` arme el texto del HUD
+    // (primera partida tras cargar la página, p. ej. con los atajos 7/8/9). El mensaje queda guardado y se pinta luego.
+    if (!this.systemText?.active) return;
     this.tweens.killTweensOf(this.systemText);
     this.systemText.setAlpha(0.86);
     this.tweens.add({
@@ -3092,14 +3088,14 @@ export class RaycastScene extends Phaser.Scene {
           difficultyLabel: preset.label,
           score: this.runScore,
           highScore: readRaycastHighScore(),
-          missionLine: 'Recupera la señal perdida y escapa del complejo.',
+          missionLine: 'Recupera la señal atrapada en el complejo y sal con vida.',
           objectiveLine: objective,
           hintLine: hint,
           tokensLine: `Fichas · ${this.getKeyCount()}/${this.currentLevel.keys.length}`,
           secretsLine: `Secretos · ${this.collectedSecrets.size}/${this.currentLevel.secrets.length}`,
           modifiersLine
         },
-        { columnChars: 28 }
+        { lineChars: 100 }
       )
     );
   }
@@ -3362,7 +3358,7 @@ export class RaycastScene extends Phaser.Scene {
     );
     if (projectileDamage > 0) this.damagePlayer(projectileDamage);
     this.enemyProjectiles = this.enemyProjectiles.filter((projectile) => projectile.alive);
-    tickDualBossCoordination(this.getLiveBosses(), bossPlayerCtx, this.time.now);
+    tickDualBossCoordination(this.getLiveBosses(), bossPlayerCtx, this.time.now, delta);
   }
 
   private trySpawnBossAdds(liveBosses: RaycastBossState[]): void {
@@ -3773,14 +3769,16 @@ export class RaycastScene extends Phaser.Scene {
           : `SECTOR ${episodeState.currentLevelNumber}/${episodeState.totalLevels} ${this.currentLevel.name.toUpperCase()}`;
 
     if (isDeath) {
-      const overlaySummary = [...buildRaycastDeathOverlaySummary(levelLine), ...summary];
-      this.finalTitleText.setText(title).setColor(titleColor);
-      this.finalSummaryText.setText(overlaySummary.join('\n'));
-      this.finalHintText.setText(buildRaycastDeathOverlayHint());
-      this.finalOverlay.setVisible(true).setAlpha(0.9);
-      this.finalTitleText.setVisible(true);
-      this.finalSummaryText.setVisible(true);
-      this.finalHintText.setVisible(true);
+      // Pantalla de fin de partida en terminal roja (HTML sobre el canvas); los textos de Phaser quedan ocultos.
+      const model = buildRaycastDeathGlassModel({
+        levelDisplayLine: levelLine,
+        elapsedMs: this.time.now - this.runStartedAt,
+        enemiesKilled: this.enemiesKilled,
+        score: this.runScore
+      });
+      this.deathGlass?.destroy();
+      this.deathGlass = new GlassOverlay(this, buildDeathTerminalHtml(model), ensureTerminalDeathStyles);
+      this.finalOverlay.setVisible(true).setAlpha(0.5);
       return;
     }
 

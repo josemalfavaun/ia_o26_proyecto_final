@@ -13,17 +13,20 @@ export interface RadioTransmissionLayout {
   liveIndicatorY: number;
 }
 
-/** Compact radio box anchored below the minimap (top-left HUD). */
+/** Espacio libre entre el borde inferior del marco del minimapa y la caja de radio. */
+export const RADIO_MINIMAP_GAP = 18;
+
+/** Compact radio box anchored below the minimap frame (top-left HUD), aligned to its left edge. */
 export function buildRadioTransmissionLayout(
   hud: Pick<
     RaycastHudLayout,
-    'minimapPanelX' | 'minimapPanelY' | 'minimapPanelHeight' | 'minimapFrameWidth'
+    'minimapFrameX' | 'minimapFrameY' | 'minimapFrameWidth' | 'minimapFrameHeight'
   >,
 ): RadioTransmissionLayout {
-  const panelWidth = Math.min(252, Math.max(196, hud.minimapFrameWidth - 8));
+  const panelWidth = Math.min(252, Math.max(196, hud.minimapFrameWidth));
   const panelHeight = 68;
-  const originX = hud.minimapPanelX + 6;
-  const originY = hud.minimapPanelY + hud.minimapPanelHeight + 10;
+  const originX = hud.minimapFrameX - hud.minimapFrameWidth * 0.5;
+  const originY = hud.minimapFrameY + hud.minimapFrameHeight * 0.5 + RADIO_MINIMAP_GAP;
   return {
     originX,
     originY,

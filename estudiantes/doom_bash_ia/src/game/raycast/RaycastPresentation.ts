@@ -74,37 +74,50 @@ export function getMainMenuInputHints(): string {
 /** Strings and vertical placement for the boot MenuScene. */
 export interface MainMenuCopy {
   title: string;
+  /** Línea bajo el título. */
   subtitle: string;
-  press3d: string;
   settingsPrompt: string;
   footerCredit: string;
-  footerInputHints: string;
 }
 
 export interface MainMenuLayout {
   centerX: number;
   titleY: number;
   subtitleY: number;
-  option3dY: number;
-  difficultyY: number;
   settingsY: number;
-  /** Center Y for the decorative frame behind the title */
+  /** Center Y for the decorative frame behind the title and subtitle */
   titleFrameCenterY: number;
-  footerHintsY: number;
-  footerMaxWidth: number;
+  /** Esquina inferior derecha donde vive el selector de dificultad (texto con origen 1,1). */
+  difficultyX: number;
+  difficultyY: number;
 }
 
-/** Death overlay — distinct voice from sector-clear screens (still terminal / horror). */
-export function buildRaycastDeathOverlaySummary(levelDisplayLine: string): string[] {
-  return [
-    'ENLACE CAÍDO',
-    'El corredor rompió tu ruta. Ajusta movimiento y prioridades para sobrevivir.',
-    levelDisplayLine
-  ];
+export interface RaycastDeathGlassInput {
+  levelDisplayLine: string;
+  elapsedMs: number;
+  enemiesKilled: number;
+  score: number;
 }
 
-export function buildRaycastDeathOverlayHint(): string {
-  return 'R REINTENTAR SECTOR  |  ESC MENÚ PRINCIPAL';
+/** Pantalla de fin de partida (terminal): título corto, una frase y tres cifras. */
+export function buildRaycastDeathGlassModel(input: RaycastDeathGlassInput): {
+  title: string;
+  subtitle: string;
+  levelLine: string;
+  stats: Array<{ label: string; value: string }>;
+} {
+  const seconds = Math.max(0, Math.floor(input.elapsedMs / 1000));
+  const time = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  return {
+    title: 'FIN DE LA PARTIDA',
+    subtitle: 'Enlace caído. Ajusta tu ruta y vuelve a intentarlo.',
+    levelLine: input.levelDisplayLine,
+    stats: [
+      { label: 'TIEMPO', value: time },
+      { label: 'BAJAS', value: String(input.enemiesKilled) },
+      { label: 'PUNTAJE', value: String(Math.max(0, Math.round(input.score))) }
+    ]
+  };
 }
 
 export function buildRaycastEpisodeBanner(input: RaycastEpisodeBannerInput): string {
@@ -119,10 +132,10 @@ export function buildRaycastEpisodeBanner(input: RaycastEpisodeBannerInput): str
 
 export function buildRaycastOverlayHint(input: RaycastOverlayHintInput): string {
   if (input.episodeComplete && input.masteryUnlocked) {
-    return 'SEÑAL VERDADERA DESBLOQUEADA  |  R REPETIR FINAL  |  ESC MENÚ';
+    return 'SEÑAL VERDADERA DESBLOQUEADA  |  N FINAL  |  R REPETIR  |  ESC MENÚ';
   }
   if (input.episodeComplete && input.finaleBossCleared && input.worldTwoLocked) {
-    return 'W MUNDO 2 (BLOQUEADO)  |  R REPETIR JEFE  |  ESC MENÚ';
+    return 'W MUNDO 2 (BLOQUEADO)  |  N FINAL  |  R REPETIR JEFE  |  ESC MENÚ';
   }
   if (!input.episodeComplete && input.finaleBossCleared && input.continueToWorldThree) {
     return 'N CONTINUAR A MUNDO 3 — MERIDIANA ASCUA  |  R REINICIAR SECTOR  |  ESC MENÚ';
@@ -130,7 +143,7 @@ export function buildRaycastOverlayHint(input: RaycastOverlayHintInput): string 
   if (!input.episodeComplete && input.finaleBossCleared && input.continueToWorldTwo) {
     return 'N CONTINUAR A MUNDO 2  |  R REPETIR JEFE  |  ESC MENÚ';
   }
-  if (input.episodeComplete) return 'R REPETIR FINAL  |  ESC MENÚ';
+  if (input.episodeComplete) return 'N VER FINAL  |  R REPETIR  |  ESC MENÚ';
   if (input.canAdvance) return `N CONTINUAR  |  R REINICIAR SECTOR  |  ESC MENÚ`;
   return `R REINICIAR SECTOR  |  ESC MENÚ`;
 }
@@ -300,11 +313,9 @@ export function buildRaycastLevelStartObjectiveMessage(input: RaycastLevelStartO
 export function getMainMenuCopy(): MainMenuCopy {
   return {
     title: 'DOOM BIN BASH EDITION',
-    subtitle: 'RAYCAST // PROTOCOL STRIP',
-    press3d: 'A / CLICK — INICIAR SECTOR 3D',
+    subtitle: 'with IA',
     settingsPrompt: 'S — CONFIG (SESIÓN)',
-    footerCredit: RAYCAST_TEAM_CREDIT_LINE,
-    footerInputHints: getMainMenuInputHints()
+    footerCredit: RAYCAST_TEAM_CREDIT_LINE
   };
 }
 
@@ -319,12 +330,14 @@ export interface PrologueCopy {
 /** Pantalla previa limpia para la corrida raycast. */
 export function getPrologueCopy(): PrologueCopy {
   return {
-    missionBlock: 'MISIÓN:\nRecupera la señal perdida dentro del complejo abandonado.',
-    objectiveBlock: 'OBJETIVO:\nSobrevive y alcanza la extracción.',
+    missionBlock:
+      'MISIÓN:\nUna señal de rescate quedó atrapada en un complejo abandonado que ahora se defiende solo. Cruza sus tres estratos (Forja de Ceniza, Abismo de Cristal y Meridiana Ascua), derrota al jefe de cada uno y recupera la señal para salir con vida.',
+    objectiveBlock:
+      'OBJETIVO:\nEn cada sector: busca las llaves, abre las puertas selladas, sobrevive a la emboscada y llega a la salida. Al final de cada mundo te espera un jefe; derrótalo para seguir. Los secretos, la puntería y la rapidez suben tu puntaje.',
     controlsBlock:
-      'WASD · mover\nMouse · apuntar\n1/2/3 · armas\nR · recargar\nESC · pausa\nMando · A iniciar · B volver · Start pausa',
-    continueLine: '[ ENTER / A / START PARA INICIAR ]',
-    backLine: '[ ESC / B PARA VOLVER AL MENÚ ]'
+      'WASD · mover\nMouse · apuntar y disparar\n1 / 2 / 3 · cambiar de arma\nR · recargar\nESC · pausa\nMando · A iniciar · B volver',
+    continueLine: '[ ENTER / A  INICIAR ]',
+    backLine: '[ ESC / B  MENÚ ]'
   };
 }
 
@@ -332,25 +345,18 @@ export function buildMainMenuLayout(width: number, height: number): MainMenuLayo
   const centerX = width * 0.5;
   const shortViewport = width <= 720 || height <= 405;
   const titleY = Math.round(height * (shortViewport ? 0.36 : 0.38));
-  const titleToFirstLine = shortViewport ? 50 : 56;
-  const subtitleY = titleY + Math.round(titleToFirstLine * 0.38);
-  const option3dY = titleY + titleToFirstLine;
-  const difficultyY = option3dY + 44;
-  const settingsY = difficultyY + 36;
-  const titleFrameCenterY = titleY - Math.round(titleToFirstLine * 0.2);
-  const safeBottomPad = shortViewport ? 22 : 28;
-  const footerHintsY = Math.max(24, height - safeBottomPad);
-  const footerMaxWidth = Math.max(220, Math.min(width - 40, shortViewport ? width - 48 : 760));
+  const subtitleY = titleY + (shortViewport ? 30 : 38);
+  const titleFrameCenterY = titleY + (shortViewport ? 10 : 12);
+  const settingsY = titleY + (shortViewport ? 84 : 104);
+  const cornerPad = shortViewport ? 16 : 24;
 
   return {
     centerX,
     titleY,
     subtitleY,
-    option3dY,
-    difficultyY,
     settingsY,
     titleFrameCenterY,
-    footerHintsY,
-    footerMaxWidth
+    difficultyX: width - cornerPad,
+    difficultyY: height - cornerPad
   };
 }

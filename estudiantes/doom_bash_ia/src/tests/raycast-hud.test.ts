@@ -199,7 +199,7 @@ describe('raycast HUD', () => {
     const healthBarRight = layout.healthBarX + layout.healthBarWidth;
 
     expect(healthBarRight).toBe(944);
-    expect(layout.minimapFrameX).toBe(134);
+    expect(layout.minimapFrameX).toBe(123);
     expect(minimapRight).toBeLessThan(healthBarRight - 40);
     expect(layout.scoreHudTextX).toBe(944);
     expect(layout.scoreHudTextY).toBeGreaterThan(layout.healthBarY);
@@ -211,8 +211,8 @@ describe('raycast HUD', () => {
     const minimapRight = layout.minimapFrameX + layout.minimapFrameWidth * 0.5;
     const healthBarRight = layout.healthBarX + layout.healthBarWidth;
 
-    expect(layout.minimapFrameWidth).toBe(266);
-    expect(layout.minimapPanelWidth).toBe(242);
+    expect(layout.minimapFrameWidth).toBe(239);
+    expect(layout.minimapPanelWidth).toBe(218);
     expect(layout.minimapTitleY).toBe(34);
     expect(minimapRight).toBeLessThan(320);
     expect(minimapRight).toBeLessThan(healthBarRight - 120);

@@ -21,7 +21,8 @@ import {
   getTouchJoystickDeadzone,
   getTouchLookSensitivity
 } from '../sessionSettings';
-import { getRaycastBossLevelId, type RaycastBossShortcutSlot } from '../raycast/RaycastBossShortcuts';
+import { resolveRaycastDemoShortcut } from '../raycast/RaycastBossShortcuts';
+import { AttractBackground } from '../raycast/AttractBackground';
 import { buildRaycastGamepadFooterLine } from '../raycast/RaycastInputHelp';
 import { RaycastGamepadInput } from '../systems/RaycastGamepadInput';
 import { RaycastTouchInput } from '../systems/RaycastTouchInput';
@@ -30,7 +31,6 @@ const MENU_BACKGROUND = RAYCAST_PALETTE.voidBlack;
 const MENU_CYAN = RAYCAST_PALETTE.plasmaBright;
 const MENU_CYAN_SOFT = RAYCAST_CSS.accentText;
 const MENU_EMBER = RAYCAST_PALETTE.amberWarn;
-const MENU_ROSE = RAYCAST_PALETTE.telegraphRose;
 const MENU_SETTINGS = '#f06f9a';
 
 export class MenuScene extends Phaser.Scene {
@@ -41,7 +41,7 @@ export class MenuScene extends Phaser.Scene {
   private gamepadInput!: RaycastGamepadInput;
   private touchInput!: RaycastTouchInput;
   private menuSelectionIndex = 0;
-  private startLine!: Phaser.GameObjects.Text;
+  private background: AttractBackground | null = null;
   private settingsLine!: Phaser.GameObjects.Text;
 
   private readonly handleStartRaycast = (): void => {
@@ -50,28 +50,23 @@ export class MenuScene extends Phaser.Scene {
     this.scene.start('PrologueScene', { difficultyId });
   };
 
-  private startRaycastBoss(slot: RaycastBossShortcutSlot): void {
+  /** Atajos de demo: 4/5/6 = niveles 3/6/10, 7/8/9 = jefes, tecla a la derecha del 0 = pantalla final. */
+  private readonly handleDemoShortcut = (event: KeyboardEvent): void => {
+    const shortcut = resolveRaycastDemoShortcut(event);
+    if (!shortcut) return;
+    if (shortcut.kind === 'victory') {
+      this.scene.start('VictoryScene', { returnTo: 'MenuScene' });
+      return;
+    }
     const difficultyId = getRaycastDifficultyPreset(this.registry.get(RAYCAST_DIFFICULTY_REGISTRY_KEY)).id;
     this.scene.start('RaycastScene', {
-      levelId: getRaycastBossLevelId(slot),
+      levelId: shortcut.levelId,
       difficultyId,
       carryScore: 0,
       carryCampaignMetrics: createEmptyCampaignMetrics(),
       rewardTier: 0,
       runModifierId: null
     });
-  }
-
-  private readonly handleBossMenuOne = (): void => {
-    this.startRaycastBoss(1);
-  };
-
-  private readonly handleBossMenuTwo = (): void => {
-    this.startRaycastBoss(2);
-  };
-
-  private readonly handleBossMenuThree = (): void => {
-    this.startRaycastBoss(3);
   };
 
   private readonly handleOpenSettings = (): void => {
@@ -126,7 +121,7 @@ export class MenuScene extends Phaser.Scene {
 
   private buildDifficultyMenuLine(): string {
     const preset = getRaycastDifficultyPreset(this.registry.get(RAYCAST_DIFFICULTY_REGISTRY_KEY));
-    return `DIFFICULTY · ${preset.label.toUpperCase()}  ·  [D] CYCLE`;
+    return `DIFICULTAD · ${preset.label.toUpperCase()}  ·  [D] CAMBIAR`;
   }
 
   constructor() {
@@ -161,7 +156,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(MENU_BACKGROUND);
 
-    this.drawBackdrop(width, height);
+    this.background = new AttractBackground(this, width, height);
     this.drawTitleFrame(width, height, layout.titleFrameCenterY);
 
     this.add
@@ -176,39 +171,21 @@ export class MenuScene extends Phaser.Scene {
         wordWrap: { width: width - 48 }
       })
       .setOrigin(0.5)
-      .setDepth(8);
+      .setDepth(30);
 
     this.add
       .text(layout.centerX, layout.subtitleY, copy.subtitle, {
         fontFamily: 'monospace',
-        fontSize: width <= 720 ? '11px' : '13px',
+        fontSize: width <= 720 ? '16px' : '22px',
         fontStyle: '700',
-        color: '#9aa8bc',
+        color: '#9ef0cf',
+        stroke: '#05070b',
+        strokeThickness: 4,
         align: 'center',
-        wordWrap: { width: width - 48 }
+        letterSpacing: 8
       })
       .setOrigin(0.5)
-      .setDepth(8)
-      .setAlpha(0.9);
-
-    this.startLine = this.add
-      .text(layout.centerX, layout.option3dY, copy.press3d, {
-        fontFamily: 'monospace',
-        fontSize: '17px',
-        fontStyle: '700',
-        color: MENU_CYAN_SOFT,
-        align: 'center'
-      })
-      .setOrigin(0.5)
-      .setDepth(8)
-      .setInteractive({ useHandCursor: true })
-      .on(Phaser.Input.Events.POINTER_DOWN, this.handleStartRaycast);
-
-    this.startLine.on(Phaser.Input.Events.POINTER_OVER, () => {
-      this.menuSelectionIndex = 0;
-      this.refreshMenuSelectionVisuals();
-    });
-    this.startLine.on(Phaser.Input.Events.POINTER_OUT, () => this.refreshMenuSelectionVisuals());
+      .setDepth(30);
 
     this.settingsLine = this.add
       .text(layout.centerX, layout.settingsY, copy.settingsPrompt, {
@@ -219,7 +196,7 @@ export class MenuScene extends Phaser.Scene {
         align: 'center'
       })
       .setOrigin(0.5)
-      .setDepth(8)
+      .setDepth(30)
       .setAlpha(0.92)
       .setInteractive({ useHandCursor: true })
       .on(Phaser.Input.Events.POINTER_DOWN, this.handleOpenSettings);
@@ -238,7 +215,7 @@ export class MenuScene extends Phaser.Scene {
         align: 'center'
       })
       .setOrigin(0.5)
-      .setDepth(8)
+      .setDepth(30)
       .setAlpha(0.82);
 
     // Multiplayer entry — sits below the gamepad status line (settingsY + 52).
@@ -253,41 +230,31 @@ export class MenuScene extends Phaser.Scene {
         align: 'center'
       })
       .setOrigin(0.5)
-      .setDepth(8)
+      .setDepth(30)
       .setAlpha(0.92)
       .setInteractive({ useHandCursor: true })
       .on(Phaser.Input.Events.POINTER_DOWN, this.handleOpenMultiplayer);
     multiLine.on(Phaser.Input.Events.POINTER_OVER, () => multiLine.setColor('#a0fff0'));
     multiLine.on(Phaser.Input.Events.POINTER_OUT, () => multiLine.setColor('#4de8b0'));
 
-    const shortFooter = width <= 720 || height <= 405;
-    const footerFontSize = shortFooter ? '9px' : '10px';
-
-    this.add
-      .text(layout.centerX, layout.footerHintsY, copy.footerInputHints, {
-        fontFamily: 'monospace',
-        fontSize: footerFontSize,
-        fontStyle: '700',
-        color: '#5c6a7c',
-        align: 'center',
-        letterSpacing: 0.35,
-        wordWrap: { width: layout.footerMaxWidth }
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(8)
-      .setAlpha(0.88);
-
     this.difficultyHintText = this.add
-      .text(layout.centerX, layout.difficultyY, this.buildDifficultyMenuLine(), {
+      .text(layout.difficultyX, layout.difficultyY, this.buildDifficultyMenuLine(), {
         fontFamily: 'monospace',
-        fontSize: '13px',
+        fontSize: '14px',
         fontStyle: '700',
         color: '#ff9a38',
-        align: 'center'
+        stroke: '#05070b',
+        strokeThickness: 4,
+        align: 'right'
       })
-      .setOrigin(0.5)
-      .setDepth(8)
-      .setAlpha(0.92);
+      .setOrigin(1, 1)
+      .setDepth(30)
+      .setAlpha(0.95)
+      .setInteractive({ useHandCursor: true })
+      .on(Phaser.Input.Events.POINTER_DOWN, this.handleCycleDifficulty);
+
+    // Un clic en cualquier parte que no sea otra opción inicia la partida.
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, this.handleBackgroundClick);
 
     this.refreshMenuSelectionVisuals();
     this.cameras.main.fadeIn(520, 0, 0, 0);
@@ -298,7 +265,8 @@ export class MenuScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, this.cleanupInputListeners, this);
   }
 
-  update(): void {
+  update(_time: number, deltaMs: number): void {
+    this.background?.update(deltaMs);
     this.gamepadInput.update();
     this.touchInput.update();
     const touchMessage = this.touchInput.consumeStatusMessage();
@@ -333,43 +301,19 @@ export class MenuScene extends Phaser.Scene {
     }
   }
 
-  private drawBackdrop(width: number, height: number): void {
-    const graphics = this.add.graphics().setDepth(0);
-    graphics.fillGradientStyle(0x030508, 0x030508, 0x0c1018, 0x06080c, 1);
-    graphics.fillRect(0, 0, width, height);
-
-    graphics.lineStyle(1, 0x1a2430, 0.3);
-    for (let y = 0; y < height; y += 5) {
-      graphics.lineBetween(0, y, width, y);
-    }
-
-    for (let i = 0; i < 14; i += 1) {
-      const barY = 26 + i * 34;
-      const barWidth = Math.round(width * (0.2 + (i % 4) * 0.13));
-      const barX = i % 2 === 0 ? 0 : width - barWidth;
-      const color = i % 3 === 0 ? MENU_CYAN : i % 3 === 1 ? MENU_EMBER : MENU_ROSE;
-      graphics.fillStyle(color, 0.08);
-      graphics.fillRect(barX, barY, barWidth, 6);
-    }
-
-    for (let i = 0; i < 28; i += 1) {
-      const x = 24 + ((i * 73) % (width - 48));
-      const y = 42 + ((i * 47) % (height - 84));
-      const radius = i % 3 === 0 ? 2 : 1;
-      const color = i % 4 < 2 ? MENU_EMBER : MENU_CYAN;
-      graphics.fillStyle(color, i % 4 === 0 ? 0.34 : 0.18);
-      graphics.fillCircle(x, y, radius);
-    }
-  }
+  private readonly handleBackgroundClick = (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]): void => {
+    if (currentlyOver.length > 0) return;
+    this.handleStartRaycast();
+  };
 
   private drawTitleFrame(width: number, height: number, centerY: number): void {
-    const graphics = this.add.graphics().setDepth(2);
+    const graphics = this.add.graphics().setDepth(22);
     const frameWidth = Math.min(width - 120, 620);
     const frameHeight = Math.min(height * 0.2, 132);
     const frameX = width * 0.5 - frameWidth * 0.5;
     const frameY = centerY - frameHeight * 0.5;
 
-    graphics.fillStyle(0x050810, 0.9);
+    graphics.fillStyle(0x050810, 0.62);
     graphics.fillRoundedRect(frameX, frameY, frameWidth, frameHeight, 14);
     graphics.lineStyle(2, MENU_CYAN, 0.45);
     graphics.strokeRoundedRect(frameX, frameY, frameWidth, frameHeight, 14);
@@ -384,9 +328,7 @@ export class MenuScene extends Phaser.Scene {
     kb?.once('keydown-a', this.handleStartRaycast);
     kb?.on('keydown-D', this.handleCycleDifficulty);
     kb?.on('keydown-d', this.handleCycleDifficulty);
-    kb?.on('keydown-FOUR', this.handleBossMenuOne);
-    kb?.on('keydown-FIVE', this.handleBossMenuTwo);
-    kb?.on('keydown-SIX', this.handleBossMenuThree);
+    kb?.on('keydown', this.handleDemoShortcut);
     kb?.on('keydown-S', this.handleOpenSettings);
     kb?.on('keydown-s', this.handleOpenSettings);
     kb?.on('keydown-M', this.handleOpenMultiplayer);
@@ -401,20 +343,18 @@ export class MenuScene extends Phaser.Scene {
     kb?.off('keydown-a', this.handleStartRaycast);
     kb?.off('keydown-D', this.handleCycleDifficulty);
     kb?.off('keydown-d', this.handleCycleDifficulty);
-    kb?.off('keydown-FOUR', this.handleBossMenuOne);
-    kb?.off('keydown-FIVE', this.handleBossMenuTwo);
-    kb?.off('keydown-SIX', this.handleBossMenuThree);
+    kb?.off('keydown', this.handleDemoShortcut);
     kb?.off('keydown-S', this.handleOpenSettings);
     kb?.off('keydown-s', this.handleOpenSettings);
     kb?.off('keydown-M', this.handleOpenMultiplayer);
     kb?.off('keydown-m', this.handleOpenMultiplayer);
+    this.input.off(Phaser.Input.Events.POINTER_DOWN, this.handleBackgroundClick);
     this.gamepadInput?.destroy();
     this.touchInput?.destroy();
     this.inputListenersRegistered = false;
   }
 
   private refreshMenuSelectionVisuals(): void {
-    this.startLine?.setColor(this.menuSelectionIndex === 0 ? '#ffffff' : MENU_CYAN_SOFT);
     this.settingsLine?.setColor(this.menuSelectionIndex === 1 ? '#ffd0e8' : MENU_SETTINGS);
   }
 

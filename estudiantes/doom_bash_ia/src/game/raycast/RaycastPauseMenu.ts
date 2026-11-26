@@ -75,6 +75,7 @@ export const RAYCAST_CONTROL_PAUSE_ROWS = [
 
 export type RaycastControlPauseRow = (typeof RAYCAST_CONTROL_PAUSE_ROWS)[number];
 
+const DEFAULT_LINE_CHARS = 100;
 const DEFAULT_COL_CHARS = 30;
 
 export function truncatePauseField(text: string, maxChars: number): string {
@@ -130,6 +131,23 @@ export interface RaycastControlPauseModel {
   minimap: string;
 }
 
+/** Junta fragmentos con ' · ' en tantas líneas como hagan falta para que ninguna pase de `width` (sin cortar texto). */
+function packPauseParts(parts: string[], width: number): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const part of parts) {
+    const next = cur ? `${cur} · ${part}` : part;
+    if (cur && next.length > width) {
+      lines.push(cur);
+      cur = part;
+    } else {
+      cur = next;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.map((l) => truncatePauseField(l, width));
+}
+
 function formatSectionHeader(title: string): string {
   return `// ${title}`;
 }
@@ -146,56 +164,50 @@ function formatSettingsRow(
 }
 
 /**
- * Menú de pausa principal: columnas compactas, controles resumidos, menú al final.
+ * Menú de pausa principal: secciones a todo el ancho (la misión sale completa) separadas por una línea en blanco,
+ * controles resumidos y el menú en dos columnas. Son ~27 líneas con letra de 10 px, así que cabe en el panel.
  */
 export function formatRaycastPauseMenuMxBody(
   model: RaycastPauseMenuMxModel,
-  opts?: { columnChars?: number },
+  opts?: { lineChars?: number },
 ): string {
-  const w = opts?.columnChars ?? DEFAULT_COL_CHARS;
+  const w = opts?.lineChars ?? DEFAULT_LINE_CHARS;
   const L = (s: string) => truncatePauseField(s, w);
-  const col = (left: string, right: string) => `${left.padEnd(w)} │ ${right}`;
 
-  const leftBlock = [
+  const menuCell = (i: number): string => {
+    const label = RAYCAST_PAUSE_MENU_LABELS[i];
+    if (label === undefined) return '';
+    return `${i === model.selectionIndex ? '> ' : '  '}${label}`;
+  };
+  const split = Math.ceil(RAYCAST_PAUSE_MENU_LABELS.length / 2);
+  const menuLines: string[] = [];
+  for (let i = 0; i < split; i += 1) {
+    menuLines.push(`${menuCell(i).padEnd(32)}${menuCell(i + split)}`.trimEnd());
+  }
+
+  // Una línea en blanco entre bloques para que cada párrafo se vea definido.
+  return [
     formatSectionHeader('PARTIDA'),
     L(`Mundo · ${model.worldLine}`),
-    L(`Dificultad · ${model.difficultyLabel}`),
-    L(`Puntaje · ${model.score}`),
-    L(`Mejor · ${model.highScore}`),
-    L(model.tokensLine),
-    L(model.secretsLine),
-  ];
-  const rightBlock = [
+    L(`Dificultad · ${model.difficultyLabel}  ·  Puntaje · ${model.score}  ·  Mejor · ${model.highScore}`),
+    L(`${model.tokensLine}  ·  ${model.secretsLine}`),
+    '',
+    formatSectionHeader('MISIÓN'),
+    L(model.missionLine),
+    '',
     formatSectionHeader('OBJETIVO'),
-    L(`Misión · ${model.missionLine}`),
     L(`Objetivo · ${model.objectiveLine}`),
     L(`Pista · ${model.hintLine}`),
     L(`Mods · ${model.modifiersLine}`),
-  ];
-  const n = Math.max(leftBlock.length, rightBlock.length);
-  const pairLines: string[] = [];
-  for (let i = 0; i < n; i += 1) {
-    pairLines.push(col(leftBlock[i] ?? '', rightBlock[i] ?? ''));
-  }
-
-  const menuLines = RAYCAST_PAUSE_MENU_LABELS.map((label, i) => {
-    const prefix = i === model.selectionIndex ? '> ' : '  ';
-    return `${prefix}${label}`;
-  });
-
-  return [
-    `VOLUMEN ${model.volumePct}%`,
-    '',
-    ...pairLines,
     '',
     formatSectionHeader('CONTROLES'),
     formatRaycastActiveInputLine(model.activeInput),
-    truncatePauseField(formatRaycastControlsHelpBlock(model.activeInput).replace(/\n/g, ' · '), w * 2 + 4),
+    ...packPauseParts(formatRaycastControlsHelpBlock(model.activeInput).split('\n'), w),
     '',
     formatSectionHeader('MENÚ'),
     ...menuLines,
     '',
-    '↑↓ menú · ENTER · ESC',
+    `↑↓ menú · ENTER · ESC  ·  VOLUMEN ${model.volumePct}%`,
   ].join('\n');
 }
 

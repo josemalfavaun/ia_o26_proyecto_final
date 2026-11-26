@@ -216,6 +216,9 @@ export function buildRaycastScoreHudLine(score: number, highScore: number): stri
   return `SCORE ${safeScore}  |  HI ${safeHi}`;
 }
 
+/** Factor de tamaño del minimapa (marco y panel). 0.9 = 10 % más pequeño que el diseño original. */
+export const RAYCAST_MINIMAP_SCALE = 0.9;
+
 export function buildRaycastHudLayout(width: number, height: number): RaycastHudLayout {
   const pad = 24;
   const compact = width <= 960 || height <= 540;
@@ -224,10 +227,10 @@ export function buildRaycastHudLayout(width: number, height: number): RaycastHud
   const healthBarTrackHeight = 10;
   const healthBarFillHeight = 6;
   const healthBarY = 74;
-  const minimapFrameWidth = compact ? 220 : 266;
-  const minimapFrameHeight = compact ? 172 : 212;
-  const minimapPanelWidth = compact ? 200 : 242;
-  const minimapPanelHeight = compact ? 150 : 184;
+  const minimapFrameWidth = Math.round((compact ? 220 : 266) * RAYCAST_MINIMAP_SCALE);
+  const minimapFrameHeight = Math.round((compact ? 172 : 212) * RAYCAST_MINIMAP_SCALE);
+  const minimapPanelWidth = Math.round((compact ? 200 : 242) * RAYCAST_MINIMAP_SCALE);
+  const minimapPanelHeight = Math.round((compact ? 150 : 184) * RAYCAST_MINIMAP_SCALE);
   const minimapTitleHeight = 20;
   const minimapTitleGap = compact ? 10 : 8;
   /** Minimapa anclado arriba-izquierda (centro del marco); título encima con `pad` desde el borde. */
