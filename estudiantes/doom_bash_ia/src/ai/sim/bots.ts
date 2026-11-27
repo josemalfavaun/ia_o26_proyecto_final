@@ -47,7 +47,7 @@ export const randomBotFactory: SimBotFactory = (seed: number): SimBot => {
   };
 };
 
-interface Target {
+export interface Target {
   x: number;
   y: number;
   bearing: number;
@@ -63,7 +63,7 @@ export function findGridRoute(map: RaycastMap, fromX: number, fromY: number, toX
   return searchGrid(map, fromX, fromY, toX, toY, { algorithm: 'bfs', radius: RAYCAST_MOVEMENT.collisionRadius }).path;
 }
 
-function pickTarget(observation: SimObservation): Target | null {
+export function pickTarget(observation: SimObservation): Target | null {
   const visibleEnemy = observation.enemies.find((enemy) => enemy.hasLineOfSight);
   const enemy = visibleEnemy ?? observation.enemies[0] ?? null;
   const boss = observation.boss;
