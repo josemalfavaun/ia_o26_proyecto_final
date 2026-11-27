@@ -4,6 +4,7 @@ import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { nanoid } from 'nanoid';
 import { getOllamaBaseUrl, narrate, OLLAMA_MODEL, type NarrateRequest } from './gameMaster.js';
+import { isStructuredNarratorEnabled, narrateStructured } from './gameMasterStructured.js';
 import {
   isGameMasterTtsEnabled,
   isGameMasterTtsRequestEnabled,
@@ -71,7 +72,8 @@ app.get('/health', (_req, res) => {
 
 app.post('/api/game-master/narrate', async (req, res) => {
   const body = (req.body ?? {}) as NarrateRequest;
-  const result = await narrate(body);
+  // GAME_MASTER_STRUCTURED=1: el modelo responde JSON validado (M5); sin la bandera, el narrador de siempre.
+  const result = isStructuredNarratorEnabled() ? await narrateStructured(body) : await narrate(body);
   res.json(result);
   speakGameMasterNarration(result.message, result.source, {
     enabled: isGameMasterTtsRequestEnabled(body.tts),
