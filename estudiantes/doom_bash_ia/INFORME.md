@@ -14,6 +14,8 @@ sobre todo, **las mide**:
 | Rutas de los enemigos | A\* con vecindad de 8 casillas | La regla original (línea recta y rumbos al azar) |
 | Ataques del jefe | Expectimax con nodos de azar | La regla original y políticas triviales |
 | Reto del encuentro con el jefe | Thompson sampling (bandido de nueve brazos) | Epsilon-voraz, UCB1, brazo fijo, azar y la regla original |
+| Bot que juega (en el simulador) | Q-learning tabular jerárquico | Bot guionado, azar y quieto |
+| Narrador con modelo local | Salida JSON validada con respaldo | Narrador de texto libre del juego base (medido: formato válido en 60 de 60 tras corregir el prompt) |
 
 Todo se evalúa en un simulador determinista (M0) que corre el núcleo real del juego sin navegador. Cada cifra de este
 informe sale de un episodio simulado con semilla fija, con intervalo de confianza donde aplica.
@@ -21,7 +23,10 @@ informe sale de un episodio simulado con semilla fija, con intervalo de confianz
 **Resultado en una línea por módulo.** A* sí ayuda a que los enemigos lleguen al jugador. Expectimax con el objetivo de
 daño es un resultado negativo (no le gana a "siempre el mismo ataque"); con el objetivo de ritmo sí acerca el daño a una
 meta. El bandido le gana a la regla original y al azar, pero no a un brazo fijo bien escogido ni a epsilon-voraz.
-**Nada de esto se ha probado con personas.**
+El Q-learning aprende a **sobrevivir** al jefe (recibe un tercio del daño del bot guionado) pero no a vencerlo, y su
+resultado depende de cómo se escriba la recompensa. El narrador estructurado cumple el formato en 60 de 60 llamadas
+con un modelo real tras corregir un error del prompt (20 % con el primero); el campo `tono` casi no varía. **Todas las cifras de este informe vienen del simulador; las
+partidas con personas dependen de que se junten archivos del modo estudio (sección 9).**
 
 ## 2. Qué se hizo y qué no
 
@@ -35,10 +40,12 @@ meta. El bandido le gana a la regla original y al azar, pero no a un brazo fijo 
 | Coordinación de enemigos con anillo de aproximación y húngaro (plan de M1) | **No se hizo.** Se probó un flanqueo por penalización de rutas y no mostró efecto |
 | Dibujar las rutas de A\* en el juego (plan de la demo) | **No se hizo** |
 | MCTS con UCT para el jefe (plan de M2) | **No se hizo**; solo expectimax |
-| M4 Bot que aprende con Q-learning | **No se hizo.** Los bots son guionados, no aprenden |
-| M5 Narrador con estado estructurado | **No se hizo.** El narrador sigue como en el juego base |
+| M4 Bot que aprende con Q-learning | Hecho y medido en el simulador (no está conectado al juego). Resultado mixto |
+| M5 Narrador con salida estructurada | Hecho y medido con un modelo real: 20 % de respuestas válidas con el primer prompt (error propio) y 100 % con el corregido; el campo `tono` casi no varía |
+| Modo estudio para partidas con personas | Hecho y probado; **datos reales: aún no hay** |
 
-El plan original ([`docs/PLAN_IA.md`](docs/PLAN_IA.md)) ya decía que M4 era lo primero que se recortaba si faltaba tiempo.
+El plan original ([`docs/PLAN_IA.md`](docs/PLAN_IA.md)) ya decía que M4 era lo primero que se recortaba si faltaba tiempo;
+al final se hizo, con las limitaciones de la sección 7.
 
 ## 3. Método común (M0)
 
@@ -182,7 +189,60 @@ como lo haría una persona. Un jugador real probablemente juegue pocas decenas d
 dato); con nueve brazos y 10 o 20 encuentros el bandido casi no aprende, y para el juego real convendría el prior
 poblacional y pocos brazos.
 
-## 7. Integración en el juego (Fase 3)
+## 7. M4: Q-learning tabular jerárquico
+
+Detalle del diseño y las curvas en [`docs/QLEARNING.md`](docs/QLEARNING.md) y `resultados/bench-qlearn.md`.
+
+El agente elige una de 6 macros cada 160 ms (sostener, avanzar, rodear a cada lado, retroceder, esquivar) sobre un estado
+de 1 620 casillas; un controlador fijo las traduce a teclas. Se entrenó en el simulador con semillas 1, 2, 3…, se validó
+con 5001–5020 y se probó en 100 semillas (10001 en adelante) que no se vieron.
+
+| Escenario | q-learning | bot guionado | Lectura |
+|---|---|---|---|
+| Nivel 1 | Gana 100 % ± 2, 18.8 s | Gana 100 % ± 2, 26.5 s | Nivel demasiado fácil: solo se aprecia que aprende a ir más rápido |
+| Jefe 1, recompensa prudente | Gana 8 % ± 5, muere 13 %, daño 36.5 ± 7.9 | Gana 0 %, muere 82 %, daño 105.0 ± 3.5 | Aprende a sobrevivir; vida restante del jefe 0.58 contra 0.62 (no significativo) |
+| Jefe 1, recompensa agresiva | Gana 3 % ± 4, muere 49 %, jefe en 0.46 ± 0.04 | (igual que arriba) | Hace más daño al jefe (−0.17 ± 0.04 pareado) pero muere mucho más |
+
+**Qué no se puede afirmar.** Que el agente "aprendió a vencer al jefe": no lo hace de forma sólida. Que la diferencia con
+la recompensa agresiva sea una propiedad del algoritmo: cada configuración se entrenó una sola vez, así que no se
+estimó la varianza del entrenamiento. Que el nivel 1 muestre aprendizaje: la curva está en 100 % desde el episodio 187.
+
+## 8. M5: narrador con salida estructurada
+
+Detalle en [`docs/NARRADOR.md`](docs/NARRADOR.md). El narrador base pide texto libre; la versión estructurada pide un
+JSON con una línea de hasta 22 palabras y un tono entre cuatro, lo valida con rigor y, si falla, usa una frase de respaldo
+registrando el motivo, de modo que se pueden contar los fallos. Se activa con `GAME_MASTER_STRUCTURED=1`.
+
+**Mediciones con un modelo real** (llama3.2:3b local, 60 llamadas por corrida, 26-nov-2026):
+
+| Corrida | Prompt | Respuestas válidas | Latencia mediana / p95 |
+|---|---|---|---|
+| v1 | con un error (decía "tensión" con acento y pedía `tension`) | 12 de 60 (20 %) | 1010 / 1154 ms |
+| v1b | igual | 15 de 60 (25 %) | 994 / 1144 ms |
+| v2 | corregido | 60 de 60 (100 %) | 931 / 1106 ms |
+
+En la v1 los fallos eran todos de esquema por esa contradicción: el modelo copiaba "tensión" y el validador lo rechazaba.
+Se corrigió el prompt (no se relajó el validador) y la v2 cumple el formato en las 60 llamadas. **Cuidado al leerlo:** el
+prompt se ajustó mirando esta misma tanda; es un solo modelo pequeño y un solo prompt; y cumplir el formato no es calidad.
+En la v2 el `tono` fue `tension` en 57 de 60 respuestas, sin relación visible con el evento, así que ese campo casi no
+aporta información; las frases fueron todas distintas. La calidad narrativa no se midió. Detalle en
+[`docs/NARRADOR.md`](docs/NARRADOR.md); `npm run bench:narrator` repite la medición.
+
+## 9. Modo estudio: partidas con personas
+
+Detalle en [`docs/ESTUDIO.md`](docs/ESTUDIO.md). Con `?estudio=1` y el consentimiento de la persona, cada encuentro con
+el jefe se asigna a un brazo del bandido **al azar y de forma uniforme**, se guarda en su navegador con un identificador
+aleatorio (sin nombre, cuenta ni IP) y se exporta con la tecla K. `npm run analizar:estudio` agrega los archivos que
+lleguen (carpeta `datos/sesiones/`, fuera del repositorio) y escribe `resultados/estudio-resumen.md`.
+
+**Qué se podrá concluir con esos datos:** si la presión de los brazos baja la vida final de personas reales en el mismo
+sentido que en el simulador, y cuántos encuentros caen en la banda de reto. **Qué no:** que el bandido mejore el reto,
+porque con unas decenas de peleas y nueve brazos no alcanza a aprender dentro de una sesión.
+
+**Estado: hecho y probado con archivos sintéticos (marcados como tales en las pruebas); todavía no hay datos reales, y
+este informe no incluye ninguna cifra de personas.** Si se juntan, se añadirán aquí con su tamaño de muestra.
+
+## 10. Integración en el juego (Fase 3)
 
 `RaycastScene` consulta un runtime de IA (`src/ai/runtime/AiRuntime.ts`, sin Phaser) que devuelve el navegador y la
 política de jefe según el modo elegido. Con los modos por omisión devuelve `undefined`, y el juego usa la regla
@@ -190,7 +250,7 @@ original. Teclas `I`, `U`, `O` y parámetro `?ia=` de la URL; detalle y límites
 El bandido en el juego elige un brazo cuando aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si
 el jefe cae, guarda su creencia en el navegador y empieza otra ventana.
 
-**Qué se verificó.** Pruebas unitarias del runtime (11) y de todo el proyecto (790 en total, en 111 archivos). En el demo desplegado se
+**Qué se verificó.** Pruebas unitarias del runtime (11) y de todo el proyecto (829 en total, en 115 archivos). En el demo desplegado se
 comprobó que A\* planifica rutas (8 planes y 74 nodos en los primeros segundos), que el bandido elige un brazo al aparecer
 el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisión en vivo (1.15 ms por decisión).
 
@@ -198,7 +258,7 @@ el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisió
 
 - Un encuentro completo de 40 s en el navegador con el cierre y el guardado de la creencia: solo está cubierto por
   pruebas unitarias, no se observó en una partida larga.
-- Ninguna sesión con personas. No hay datos de jugadores reales.
+- Ninguna sesión con personas. No hay datos de jugadores reales; el modo estudio de la sección 9 existe para obtenerlos.
 - El modo "expectimax" del panel usa una meta fija de 4 puntos por salva, que es el mejor brazo único de la tabla de M3,
   escogido con la tabla a la vista.
 - La política de ritmo ve el daño ya escalado por la dificultad del juego, pero los brazos se calibraron con el daño sin
@@ -224,10 +284,10 @@ arriba; se declaran para que el código de esas carpetas no quede sin explicar:
   (`tickDualBossCoordination` movía a los jefes a unos 17 casillas por segundo, 2.5 veces la del jugador). El simulador usa
   un jefe por nivel y no ejecuta esa coordinación, por lo que las tablas de M2 y M3 no cambian.
 
-## 8. Límites globales
+## 11. Límites globales
 
 1. **Todos los jugadores son bots.** Cada conclusión vale para esos perfiles y no se extrapola a personas sin probar con
-   personas.
+   personas (el modo estudio permitiría hacerlo, pero aún no hay datos).
 2. **Circularidad.** El modelo del jugador de M2 y el banco de pruebas comparten supuestos de movimiento; las
    probabilidades de M3 salen del mismo simulador.
 3. **Parámetros de diseño.** La banda de reto (30 a 70 %), la meta de ritmo (T = 6) y la elección de los brazos son
@@ -244,22 +304,27 @@ arriba; se declaran para que el código de esas carpetas no quede sin explicar:
    a 0.02. La conclusión "el bandido le gana a la regla original y al azar" se mantiene; "Thompson empata con un brazo fijo"
    no. Por eso el valor se dejó en 0.65 y las tablas de este informe son las de ese valor. Detalle en
    [`evidencia/2026-11-25-barrido-y-sensibilidad.md`](evidencia/2026-11-25-barrido-y-sensibilidad.md).
+8. **M4 y M5.** El Q-learning se entrenó una vez por configuración y se probó solo en el simulador; el narrador
+   estructurado se midió con un solo modelo pequeño (llama3.2:3b) y un solo prompt, ajustado con la misma tanda de 60.
 
-## 9. Cómo reproducir
+## 12. Cómo reproducir
 
 ```bash
 npm ci
-npm test                             # 111 archivos, 790 pruebas
+npm test                             # 115 archivos, 829 pruebas
 npm run bench:sim
 npm run bench:nav
 npm run bench:boss -- --seeds 40     # varios minutos
 npm run bench:director -- --rebuild  # poco más de un minuto; regenera resultados/ idénticos (verificado el 25-nov)
 npm run bench:director-knobs
+npm run bench:qlearn                 # M4: unos 4 minutos
+npm run bench:narrator               # M5: necesita Ollama encendido
+npm run analizar:estudio             # lee datos/sesiones/*.json si existen
 ```
 
-## 10. Uso de asistentes de IA
+## 13. Uso de asistentes de IA
 
-El código de los módulos M0 a M3, el runtime y el panel, y los documentos de `docs/` y este informe se escribieron con
+El código de los módulos M0 a M5, el runtime, el panel y el modo estudio, y los documentos de `docs/` y este informe se escribieron con
 Claude (Anthropic) como asistente de programación. José Malfavaun definió el alcance y el diseño, pidió cada módulo,
 revisó el código y los resultados, ejecutó las pruebas y los benchmarks en su máquina, y hizo los commits con su propia
 cuenta. Las decisiones de qué reportar como resultado negativo (daño del jefe, perillas del director, flanqueo, bandido
@@ -271,7 +336,7 @@ probó en el navegador y commiteó. Los sprites de los jefes se generaron con un
 operó; Claude no genera imágenes y solo procesó los archivos que José produjo.
 
 
-## 11. Créditos
+## 14. Créditos
 
 Juego base: José Malfavaun, ETurriza, Fr-C-S-08 y Francisco Emilio
 ([josemalfavaun/doom-bin-bash-edition](https://github.com/josemalfavaun/doom-bin-bash-edition)). Licencia MIT.

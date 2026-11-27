@@ -32,7 +32,7 @@ Sin Docker, para desarrollar (Node 22):
 ```bash
 npm ci
 npm run dev          # juego en http://localhost:5173
-npm test             # pruebas unitarias (vitest): 111 archivos, 790 pruebas
+npm test             # pruebas unitarias (vitest): 115 archivos, 829 pruebas
 npm run lint
 ```
 
@@ -71,8 +71,9 @@ aprende el bandido se guardan en el navegador. Detalles en [`docs/PANEL_IA.md`](
 | M2 Jefe con expectimax | Hecho y medido; conectado al juego. Resultado mixto | `src/ai/expectimax/` | [`docs/JEFE.md`](docs/JEFE.md) |
 | M3 Director adaptativo (Thompson sampling) | Hecho y medido; conectado al juego. Resultado mixto | `src/ai/bandit/` | [`docs/DIRECTOR.md`](docs/DIRECTOR.md) |
 | Panel de IA y runtime en el juego | Hecho | `src/ai/runtime/` | [`docs/PANEL_IA.md`](docs/PANEL_IA.md) |
-| Bot jugador con Q-learning | No se hizo (fuera de alcance) | | `docs/PLAN_IA.md`, módulo M4 |
-| Narrador con estado estructurado | No se hizo (fuera de alcance) | | `docs/PLAN_IA.md`, módulo M5 |
+| M4 Bot jugador con Q-learning | Hecho y medido en el simulador; no se conecta al juego. Resultado mixto | `src/ai/qlearn/` | [`docs/QLEARNING.md`](docs/QLEARNING.md) |
+| M5 Narrador con salida estructurada | Hecho y medido con Ollama (llama3.2:3b): 100 % de respuestas válidas tras corregir el prompt (20 % con el primero) | `server/src/gameMasterStructured.ts` | [`docs/NARRADOR.md`](docs/NARRADOR.md) |
+| Modo estudio (partidas con personas) | Hecho y probado; aún sin datos reales | `src/ai/runtime/AiRuntime.ts`, `src/ai/study/` | [`docs/ESTUDIO.md`](docs/ESTUDIO.md) |
 
 ## Cómo reproducir las mediciones
 
@@ -83,6 +84,9 @@ npm run bench:boss -- --seeds 40     # M2: jefe (varios minutos)
 npm run bench:director               # M3: usa resultados/director-tabla.json si existe
 npm run bench:director -- --rebuild  # M3: vuelve a simular la tabla (poco más de un minuto)
 npm run bench:director-knobs         # M3: el resultado negativo del director de spawns
+npm run bench:qlearn                 # M4: unos 4 minutos; `-- --scale 0.1` para una prueba rápida
+npm run bench:narrator               # M5: necesita `ollama serve`; si no responde, no escribe nada
+npm run analizar:estudio             # lee datos/sesiones/*.json (fuera del repositorio)
 ```
 
 Las tablas ya generadas del jefe y del director están en `resultados/`. Cada episodio es determinista: la misma
