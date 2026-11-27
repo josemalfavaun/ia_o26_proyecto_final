@@ -29,11 +29,14 @@
     "bench:boss": "tsx scripts/bench-boss.ts",
     "bench:director": "tsx scripts/bench-director.ts",
     "bench:director-knobs": "tsx scripts/bench-director-knobs.ts",
+    "bench:qlearn": "tsx scripts/bench-qlearn.ts",
+    "bench:narrator": "tsx scripts/bench-narrator.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "runtime:info": "node scripts/runtime-info.mjs",
     "capture:media": "node scripts/capture-portfolio.mjs",
-    "server:dev": "tsx server/src/index.ts"
+    "server:dev": "tsx server/src/index.ts",
+    "analizar:estudio": "tsx scripts/analizar-estudio.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",

@@ -13,6 +13,7 @@ import { createAStarNavigator, type AStarNavigator } from '../astar/navigator';
 import { createArmBossPolicy, PRESSURE_ARMS } from '../bandit/arms';
 import { createThompsonSelector, type ThompsonCounts, type ThompsonSelector } from '../bandit/policies';
 import { challengeReward } from '../bandit/reward';
+import { createSeededRng } from '../sim/rng';
 import type { ExpectimaxBossPolicy } from '../expectimax/policy';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastEnemyNavigator } from '../../game/raycast/RaycastEnemyNavigator';
@@ -55,6 +56,9 @@ export interface AiFrame {
   playerAlive: boolean;
   health: number;
   maxHealth: number;
+  /** Solo para el modo estudio: se anota en cada encuentro. */
+  levelId?: string;
+  difficulty?: string;
 }
 
 export interface EncounterResult {
@@ -66,6 +70,54 @@ export interface EncounterResult {
 
 const MODES_KEY = 'doom-bash-ia:modos:v1';
 const BANDIT_KEY = 'doom-bash-ia:bandido:v1';
+const STUDY_KEY = 'doom-bash-ia:estudio:v1';
+
+/**
+ * Modo estudio (partidas con personas). Con `?estudio=1` y el consentimiento de quien juega, cada encuentro del jefe
+ * se asigna a un brazo ELEGIDO AL AZAR con probabilidad uniforme (no por Thompson) y se guarda en el navegador con un
+ * identificador anónimo aleatorio. Sin nombre, sin IP, sin cuenta. Con asignación uniforme los datos permiten comparar
+ * brazos sin sesgo y evaluar cualquier política offline. La persona exporta su archivo y lo manda a mano.
+ */
+export interface StudyEncounter {
+  n: number;
+  atIso: string;
+  levelId: string;
+  difficulty: string;
+  armId: string;
+  targetDamage: number;
+  reward: 0 | 1;
+  healthFraction: number;
+  reason: EncounterResult['reason'];
+  elapsedMs: number;
+}
+
+export interface StudyFile {
+  version: 1;
+  game: 'doom-bash-ia';
+  anonId: string;
+  consentIso: string;
+  encounters: StudyEncounter[];
+}
+
+export function isStudyRequested(query: string): boolean {
+  const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+  const value = (params.get('estudio') ?? '').toLowerCase();
+  return value === '1' || value === 'true' || value === 'si';
+}
+
+function randomAnonId(): string {
+  const bytes = new Uint8Array(8);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') crypto.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function validStudyFile(value: unknown): StudyFile | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (record.version !== 1 || typeof record.anonId !== 'string' || typeof record.consentIso !== 'string' || !Array.isArray(record.encounters)) return null;
+  return value as StudyFile;
+}
 
 function isModeValue<T extends string>(value: unknown, allowed: readonly T[]): value is T {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value);
@@ -132,6 +184,16 @@ export interface AiRuntime {
   lastEncounter(): EncounterResult | null;
   /** Borra lo aprendido por el bandido (también del almacenamiento). */
   resetBandit(): void;
+  /** La URL pidió el modo estudio (`?estudio=1`). */
+  readonly studyRequested: boolean;
+  /** El modo estudio está activo: hay consentimiento. */
+  readonly studyActive: boolean;
+  /** Registra el consentimiento y activa el modo estudio. Devuelve false si no se pidió por la URL. */
+  enableStudy(): boolean;
+  /** Cuántos encuentros hay guardados. */
+  studyCount(): number;
+  /** El archivo para exportar como JSON, o null si el modo estudio no está activo. */
+  exportStudy(): string | null;
 }
 
 interface Episode {
@@ -159,6 +221,10 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
   let lastResult: EncounterResult | null = null;
   let previousBossAlive = false;
   let sessionEncounters = 0;
+  const studyRequested = isStudyRequested(options.query ?? '');
+  let study: StudyFile | null = studyRequested ? validStudyFile(readJson(storage, STUDY_KEY)) : null;
+  const studyRng = createSeededRng((seed ^ 0x5bd1e995) >>> 0);
+  let frameContext: Pick<AiFrame, 'levelId' | 'difficulty'> = {};
 
   function createBandit(initial: ThompsonCounts | null): ThompsonSelector {
     return createThompsonSelector({ arms, seed, initial: initial ?? undefined });
@@ -172,8 +238,13 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
     writeJson(storage, BANDIT_KEY, selector.counts());
   }
 
+  function saveStudy(): void {
+    if (study) writeJson(storage, STUDY_KEY, study);
+  }
+
   function startEpisode(nowMs: number): void {
-    const arm = selector.select();
+    // En el modo estudio el brazo es uniforme al azar; así los datos no dependen de lo que el selector haya creído.
+    const arm = study ? Math.floor(studyRng() * arms) : selector.select();
     episode = { arm, startedAtMs: nowMs, policy: createArmBossPolicy(PRESSURE_ARMS[arm]) };
   }
 
@@ -184,8 +255,24 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       { outcome: reason, healthRemaining: healthFraction * 100 },
       100
     );
-    selector.update(episode.arm, reward);
-    saveBandit();
+    if (study) {
+      study.encounters.push({
+        n: study.encounters.length + 1,
+        atIso: new Date().toISOString(),
+        levelId: frameContext.levelId ?? 'desconocido',
+        difficulty: frameContext.difficulty ?? 'desconocida',
+        armId: PRESSURE_ARMS[episode.arm].id,
+        targetDamage: PRESSURE_ARMS[episode.arm].targetDamage,
+        reward,
+        healthFraction: Math.round(healthFraction * 1000) / 1000,
+        reason,
+        elapsedMs: Math.round(frame.nowMs - episode.startedAtMs)
+      });
+      saveStudy();
+    } else {
+      selector.update(episode.arm, reward);
+      saveBandit();
+    }
     sessionEncounters += 1;
     lastResult = { armId: PRESSURE_ARMS[episode.arm].id, reward, healthFraction, reason };
     episode = null;
@@ -219,6 +306,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       return navigationMode;
     },
     cycleBossDirector() {
+      if (study) return bossMode; // En el modo estudio el jefe siempre es el del bandido con brazos al azar.
       bossMode = BOSS_DIRECTOR_MODES[(BOSS_DIRECTOR_MODES.indexOf(bossMode) + 1) % BOSS_DIRECTOR_MODES.length];
       // Un encuentro a medias de otro modo no cuenta como evidencia.
       episode = null;
@@ -227,6 +315,8 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       return bossMode;
     },
     update(frame) {
+      frameContext = { levelId: frame.levelId, difficulty: frame.difficulty };
+      if (study && bossMode !== 'bandit') bossMode = 'bandit';
       // Cada pelea nueva empieza con una política limpia (el déficit de ritmo no cruza peleas).
       if (frame.bossAlive && !previousBossAlive) expectimax = null;
       if (bossMode !== 'bandit') {
@@ -247,6 +337,19 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       sessionEncounters = 0;
       saveBandit();
     },
+    studyRequested,
+    get studyActive() {
+      return study !== null;
+    },
+    enableStudy() {
+      if (!studyRequested) return false;
+      study ??= { version: 1, game: 'doom-bash-ia', anonId: randomAnonId(), consentIso: new Date().toISOString(), encounters: [] };
+      bossMode = 'bandit';
+      saveStudy();
+      return true;
+    },
+    studyCount: () => study?.encounters.length ?? 0,
+    exportStudy: () => (study ? JSON.stringify(study, null, 2) : null),
     panelLines(frame) {
       const lines: string[] = [];
       lines.push('IA   I cierra · U navegación · O jefe');
@@ -254,7 +357,8 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       if (navigationMode === 'astar' && navigator) {
         lines.push(`  planes ${navigator.stats.plans} · nodos ${navigator.stats.expanded}`);
       }
-      lines.push(`Jefe: ${BOSS_DIRECTOR_LABELS[bossMode]}`);
+      lines.push(`Jefe: ${study ? 'ESTUDIO (brazo al azar)' : BOSS_DIRECTOR_LABELS[bossMode]}`);
+      if (study) lines.push(`  encuentros guardados: ${study.encounters.length} · K exporta`);
       if (bossMode === 'bandit') {
         const beliefs = selector.beliefs();
         const elapsed = episode ? Math.min(ENCOUNTER_WINDOW_MS, frame.nowMs - episode.startedAtMs) : 0;

@@ -462,6 +462,8 @@ export class RaycastScene extends Phaser.Scene {
   private debugHudVisible = false;
   private perfHudVisible = false;
   private aiRuntime: AiRuntime | null = null;
+  /** Modo estudio: ya se mostró el aviso de consentimiento en esta sesión (una negativa no se vuelve a preguntar). */
+  private studyConsentAsked = false;
   private aiPanelVisible = false;
   private aiPanelRefreshAt = 0;
   private frameStats: RaycastFrameStatsState = createRaycastFrameStatsState();
@@ -720,6 +722,37 @@ export class RaycastScene extends Phaser.Scene {
     const mode = this.aiRuntime.cycleNavigation();
     this.setCombatMessage(`IA // NAVEGACIÓN: ${mode === 'astar' ? 'A*' : 'REGLA ORIGINAL'}`, 1400);
     this.aiPanelRefreshAt = 0;
+  };
+
+  /** Modo estudio: pide consentimiento una sola vez por navegador (el archivo no lleva nombre ni cuenta). */
+  private askStudyConsent(): void {
+    const runtime = this.aiRuntime;
+    if (!runtime || !runtime.studyRequested || runtime.studyActive || this.studyConsentAsked || typeof window === 'undefined') return;
+    this.studyConsentAsked = true;
+    const accepted = window.confirm(
+      'MODO ESTUDIO\n\nSe guardará en ESTE navegador, sin tu nombre ni cuenta, cuánto aguantas en cada pelea contra el jefe. ' +
+        'Al terminar pulsa K para bajar un archivo y mándaselo a quien te lo pidió. ¿Aceptas?'
+    );
+    if (accepted) runtime.enableStudy();
+  }
+
+  /** Modo estudio: baja el archivo JSON con los encuentros guardados. */
+  private readonly handleExportStudy = (): void => {
+    const json = this.aiRuntime?.exportStudy() ?? null;
+    if (!json || typeof document === 'undefined') {
+      this.setCombatMessage('ESTUDIO // NO ACTIVO (abre la URL con ?estudio=1)', 1800);
+      return;
+    }
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `estudio-${(JSON.parse(json) as { anonId: string }).anonId}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    this.setCombatMessage(`ESTUDIO // ${this.aiRuntime?.studyCount() ?? 0} ENCUENTROS EXPORTADOS`, 2200);
   };
 
   private readonly handleCycleAiBoss = (): void => {
@@ -1598,6 +1631,7 @@ export class RaycastScene extends Phaser.Scene {
       storage: typeof window !== 'undefined' ? window.localStorage : null,
       query: typeof window !== 'undefined' ? window.location.search : ''
     });
+    this.askStudyConsent();
     this.aiPanelText = this.add
       .text(GAME_WIDTH - 12, 104, '', {
         fontFamily: 'monospace',
@@ -1808,7 +1842,9 @@ export class RaycastScene extends Phaser.Scene {
       bossAlive: this.getLiveBosses().length > 0,
       playerAlive: this.playerAlive,
       health: this.playerHealth,
-      maxHealth: this.playerMaxHealth
+      maxHealth: this.playerMaxHealth,
+      levelId: this.currentLevel.id,
+      difficulty: String(this.difficultyId)
     };
     this.aiRuntime.update(frame);
     if (this.aiPanelVisible && this.time.now >= this.aiPanelRefreshAt) {
@@ -2106,6 +2142,7 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.on('keydown-I', this.handleToggleAiPanel);
     keyboard?.on('keydown-U', this.handleCycleAiNavigation);
     keyboard?.on('keydown-O', this.handleCycleAiBoss);
+    keyboard?.on('keydown-K', this.handleExportStudy);
     keyboard?.on('keydown-G', this.handleGameMasterTestKey);
     keyboard?.on('keydown-L', this.handleObjectiveReminderKey);
     keyboard?.on('keydown-UP', this.handlePauseMenuUp);
@@ -2224,6 +2261,7 @@ export class RaycastScene extends Phaser.Scene {
     keyboard?.off('keydown-I', this.handleToggleAiPanel);
     keyboard?.off('keydown-U', this.handleCycleAiNavigation);
     keyboard?.off('keydown-O', this.handleCycleAiBoss);
+    keyboard?.off('keydown-K', this.handleExportStudy);
     keyboard?.off('keydown-G', this.handleGameMasterTestKey);
     keyboard?.off('keydown-L', this.handleObjectiveReminderKey);
     keyboard?.off('keydown-UP', this.handlePauseMenuUp);
