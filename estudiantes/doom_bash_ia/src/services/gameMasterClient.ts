@@ -51,11 +51,26 @@ function parseGameMasterResponse(payload: unknown): GameMasterResponse | null {
   return { message, source };
 }
 
+/**
+ * Una página publicada (https, en otro dominio) que hace `fetch` a `localhost:3001` dispara en Chrome el aviso de "acceder a
+ * otras apps y servicios de este dispositivo" (permiso de red local), y además el servidor del narrador no existe en la
+ * versión publicada. Solo se intenta el narrador local cuando la página misma se sirve desde un host local o privado.
+ */
+export function isPageOnLocalHost(location: { hostname: string } | undefined): boolean {
+  if (!location) return true; // sin navegador (pruebas, Node): no se bloquea nada
+  const host = location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1' || host.endsWith('.localhost')) return true;
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+}
+
 export async function requestNarration(
   request: GameMasterRequest,
   options: { url?: string; timeoutMs?: number } = {},
 ): Promise<GameMasterResponse> {
   const url = options.url ?? GAME_MASTER_NARRATE_URL;
+  if (options.url === undefined && !isPageOnLocalHost(typeof window === 'undefined' ? undefined : window.location)) {
+    return buildClientFallbackResponse();
+  }
   const timeoutMs = options.timeoutMs ?? GAME_MASTER_CLIENT_TIMEOUT_MS;
 
   const body: GameMasterRequest = {

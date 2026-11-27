@@ -32,7 +32,7 @@ Sin Docker, para desarrollar (Node 22):
 ```bash
 npm ci
 npm run dev          # juego en http://localhost:5173
-npm test             # pruebas unitarias (vitest): 115 archivos, 829 pruebas
+npm test             # pruebas unitarias (vitest): 115 archivos, 834 pruebas
 npm run lint
 ```
 

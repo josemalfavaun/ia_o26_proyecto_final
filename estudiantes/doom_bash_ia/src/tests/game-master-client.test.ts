@@ -146,3 +146,30 @@ describe('gameMasterClient', () => {
     expect(result.source).toBe('fallback');
   });
 });
+
+describe('narrador en la página publicada', () => {
+  it('isPageOnLocalHost reconoce hosts locales y privados, y rechaza dominios públicos', async () => {
+    const { isPageOnLocalHost } = await import('../services/gameMasterClient');
+    expect(isPageOnLocalHost(undefined)).toBe(true);
+    for (const host of ['localhost', '127.0.0.1', 'app.localhost', '192.168.1.20', '10.0.0.5', '172.21.0.3']) {
+      expect(isPageOnLocalHost({ hostname: host })).toBe(true);
+    }
+    for (const host of ['doom-bash-ia-mu.vercel.app', 'example.com', '172.32.0.1', '8.8.8.8']) {
+      expect(isPageOnLocalHost({ hostname: host })).toBe(false);
+    }
+  });
+
+  it('en una página publicada no hace fetch a localhost y devuelve el respaldo', async () => {
+    const { requestNarration } = await import('../services/gameMasterClient');
+    let calls = 0;
+    vi.stubGlobal('window', { location: { hostname: 'doom-bash-ia-mu.vercel.app' } });
+    vi.stubGlobal('fetch', vi.fn(async () => { calls += 1; return new Response('{}'); }));
+    try {
+      const result = await requestNarration({ context: 'c', event: 'e' });
+      expect(result.source).toBe('fallback');
+      expect(calls).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
