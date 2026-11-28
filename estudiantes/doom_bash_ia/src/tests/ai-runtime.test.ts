@@ -7,6 +7,8 @@ import {
   type KeyValueStorage
 } from '../ai/runtime/AiRuntime';
 import { PRESSURE_ARMS } from '../ai/bandit/arms';
+import { createRaycastEnemy } from '../game/raycast/RaycastEnemy';
+import type { RaycastMap } from '../game/raycast/RaycastMap';
 
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & { data: Record<string, string> } {
   const data = { ...initial };
@@ -147,5 +149,36 @@ describe('runtime de IA del juego', () => {
     const lines = runtime.panelLines(frame());
     expect(lines.join('\n')).toContain('expectimax');
     expect(lines.length).toBeGreaterThan(2);
+  });
+});
+
+describe('rutas de A* para el minimapa', () => {
+  const map: RaycastMap = {
+    tileSize: 1,
+    grid: ['#######', '#..#..#', '#.....#', '#######'].map((row) => Array.from(row, (ch) => (ch === '#' ? 1 : 0)))
+  };
+
+  it('en modo original no hay rutas que pintar', () => {
+    const runtime = createAiRuntime({ seed: 1 });
+    const enemy = createRaycastEnemy({ id: 'e1', kind: 'GRUNT', x: 1.5, y: 1.5 });
+    expect(runtime.navigationRoutes([enemy])).toEqual([]);
+  });
+
+  it('con A* devuelve la ruta planeada de cada enemigo vivo, sin atravesar la pared', () => {
+    const runtime = createAiRuntime({ seed: 1, query: '?ia=astar' });
+    const alive = createRaycastEnemy({ id: 'e1', kind: 'GRUNT', x: 1.5, y: 1.5 });
+    const dead = createRaycastEnemy({ id: 'e2', kind: 'GRUNT', x: 2.5, y: 2.5 });
+    dead.alive = false;
+    const navigator = runtime.navigator()!;
+    navigator.steer(map, alive, [alive, dead], 4.5, 1.5, 0);
+    navigator.steer(map, dead, [alive, dead], 4.5, 1.5, 0);
+    const routes = runtime.navigationRoutes([alive, dead]);
+    expect(routes.map((route) => route.enemyId)).toEqual(['e1']);
+    const [route] = routes;
+    expect(route.fromX).toBe(1.5);
+    expect(route.points.length).toBeGreaterThan(0);
+    expect(route.points.every((point) => map.grid[Math.floor(point.y)][Math.floor(point.x)] === 0)).toBe(true);
+    // La pared en (3,1) obliga a bajar a la fila 2.
+    expect(route.points.some((point) => Math.floor(point.y) === 2)).toBe(true);
   });
 });

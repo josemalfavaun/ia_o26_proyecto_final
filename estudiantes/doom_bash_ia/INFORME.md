@@ -38,7 +38,7 @@ partidas con personas dependen de que se junten archivos del modo estudio (secci
 | M3 Director adaptativo con Thompson sampling | Hecho, medido, conectado al juego |
 | Panel de IA en el juego y demo en línea | Hecho |
 | Coordinación de enemigos con anillo de aproximación y húngaro (plan de M1) | **No se hizo.** Se probó un flanqueo por penalización de rutas y no mostró efecto |
-| Dibujar las rutas de A\* en el juego (plan de la demo) | **No se hizo** |
+| Dibujar las rutas de A\* en el juego (plan de la demo) | Hecho (27 nov): con el panel de IA abierto, el minimapa pinta la ruta que planeó cada enemigo |
 | MCTS con UCT para el jefe (plan de M2) | **No se hizo**; solo expectimax |
 | M4 Bot que aprende con Q-learning | Hecho y medido en el simulador (no está conectado al juego). Resultado mixto |
 | M5 Narrador con salida estructurada | Hecho y medido con un modelo real: 20 % de respuestas válidas con el primer prompt (error propio) y 100 % con el corregido; el campo `tono` casi no varía |
@@ -250,7 +250,7 @@ original. Teclas `I`, `U`, `O` y parámetro `?ia=` de la URL; detalle y límites
 El bandido en el juego elige un brazo cuando aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si
 el jefe cae, guarda su creencia en el navegador y empieza otra ventana.
 
-**Qué se verificó.** Pruebas unitarias del runtime (11) y de todo el proyecto (834 en total, en 115 archivos). En el demo desplegado se
+**Qué se verificó.** Pruebas unitarias del runtime (13) y de todo el proyecto (836 en total, en 115 archivos). En el demo desplegado se
 comprobó que A\* planifica rutas (8 planes y 74 nodos en los primeros segundos), que el bandido elige un brazo al aparecer
 el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisión en vivo (1.15 ms por decisión).
 
@@ -311,7 +311,7 @@ arriba; se declaran para que el código de esas carpetas no quede sin explicar:
 
 ```bash
 npm ci
-npm test                             # 115 archivos, 834 pruebas
+npm test                             # 115 archivos, 836 pruebas
 npm run bench:sim
 npm run bench:nav
 npm run bench:boss -- --seeds 40     # varios minutos

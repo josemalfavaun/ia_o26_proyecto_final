@@ -16,7 +16,9 @@ La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan
 
 ## Qué muestra el panel
 
-- **Navegación A\***: cuántos planes se han calculado y cuántos nodos se expandieron (costo de búsqueda).
+- **Navegación A\***: cuántos planes se han calculado y cuántos nodos se expandieron (costo de búsqueda). Mientras el
+  panel está abierto, el minimapa dibuja en verde la ruta vigente de cada enemigo que persigue (de su posición a la
+  meta, por los centros de celda que eligió A\*).
 - **Expectimax**: la última decisión del jefe, los tres ataques con mejor valor esperado y los milisegundos por decisión.
 - **Bandido**: el brazo en juego (meta de daño por salva), cuánto va de la ventana de 40 s, la media y el número de veces
   de cada brazo, y el último resultado (brazo, recompensa, vida restante, motivo de cierre).
@@ -31,7 +33,7 @@ La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan
 | Contexto del jefe | `buildBossPlayerCtx` agrega `health` y `damageTaken` | Campos opcionales; la regla original no los lee |
 
 El runtime no depende de Phaser: recibe tiempo y estado del jugador en un `AiFrame` y se prueba con
-`src/tests/ai-runtime.test.ts` (11 pruebas).
+`src/tests/ai-runtime.test.ts` (13 pruebas).
 
 ## Cómo aprende el bandido en el juego
 

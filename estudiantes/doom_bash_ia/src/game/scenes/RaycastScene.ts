@@ -4494,6 +4494,23 @@ export class RaycastScene extends Phaser.Scene {
     return this.minimapStaticCells;
   }
 
+  /** Con el panel de IA abierto y navegación A*, pinta la ruta que cada enemigo planeó (M1). */
+  private drawMinimapNavigationRoutes(offsetX: number, offsetY: number, tileSize: number): void {
+    const routes = this.aiRuntime?.navigationRoutes(this.enemies) ?? [];
+    if (routes.length === 0) return;
+    const g = this.minimapGraphics;
+    g.lineStyle(Math.max(1.5, tileSize * 0.22), 0xc8ff5a, 0.85);
+    for (const route of routes) {
+      g.beginPath();
+      g.moveTo(offsetX + route.fromX * tileSize, offsetY + route.fromY * tileSize);
+      for (const point of route.points) g.lineTo(offsetX + point.x * tileSize, offsetY + point.y * tileSize);
+      g.strokePath();
+      const last = route.points[route.points.length - 1];
+      g.fillStyle(0xc8ff5a, 0.9);
+      g.fillCircle(offsetX + last.x * tileSize, offsetY + last.y * tileSize, Math.max(1.5, tileSize * 0.2));
+    }
+  }
+
   private renderMinimap(): void {
     this.minimapGraphics.clear();
     this.minimapMarkerLabels.forEach((label) => label.setVisible(false));
@@ -4556,6 +4573,8 @@ export class RaycastScene extends Phaser.Scene {
       this.minimapGraphics.fillStyle(color, alpha);
       this.minimapGraphics.fillRect(offsetX + cell.x * tileSize, offsetY + cell.y * tileSize, tileSize - 1, tileSize - 1);
     });
+
+    if (this.aiPanelVisible) this.drawMinimapNavigationRoutes(offsetX, offsetY, tileSize);
 
     for (let mi = 0; mi < model.markers.length; mi += 1) {
       const marker = model.markers[mi];

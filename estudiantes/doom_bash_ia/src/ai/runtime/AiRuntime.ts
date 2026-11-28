@@ -17,6 +17,8 @@ import { createSeededRng } from '../sim/rng';
 import type { ExpectimaxBossPolicy } from '../expectimax/policy';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastEnemyNavigator } from '../../game/raycast/RaycastEnemyNavigator';
+import type { RaycastEnemy } from '../../game/raycast/RaycastEnemy';
+import type { Waypoint } from '../astar/search';
 
 export type NavigationMode = 'legacy' | 'astar';
 export type BossDirectorMode = 'rule' | 'expectimax' | 'bandit';
@@ -167,6 +169,14 @@ function validCounts(value: unknown, arms: number): ThompsonCounts | null {
   return value as ThompsonCounts;
 }
 
+/** Ruta vigente de un enemigo para pintarla: desde su posición, pasando por los centros de celda que planeó A*. */
+export interface NavigationRouteView {
+  enemyId: string;
+  fromX: number;
+  fromY: number;
+  points: readonly Waypoint[];
+}
+
 export interface AiRuntime {
   readonly navigationMode: NavigationMode;
   readonly bossMode: BossDirectorMode;
@@ -180,6 +190,8 @@ export interface AiRuntime {
   update(frame: AiFrame): void;
   /** Líneas del panel de depuración. */
   panelLines(frame: AiFrame): string[];
+  /** Rutas de A* de los enemigos vivos, para el minimapa. Vacío en modo original o si aún no se planeó nada. */
+  navigationRoutes(enemies: readonly RaycastEnemy[]): NavigationRouteView[];
   /** Resultado del último encuentro cerrado del bandido. */
   lastEncounter(): EncounterResult | null;
   /** Borra lo aprendido por el bandido (también del almacenamiento). */
@@ -329,6 +341,17 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       }
       previousBossAlive = frame.bossAlive;
     },
+    navigationRoutes(enemies) {
+      if (navigationMode !== 'astar' || !navigator) return [];
+      const views: NavigationRouteView[] = [];
+      for (const enemy of enemies) {
+        if (!enemy.alive) continue;
+        const points = navigator.routeOf(enemy);
+        if (points.length === 0) continue;
+        views.push({ enemyId: enemy.id, fromX: enemy.x, fromY: enemy.y, points });
+      }
+      return views;
+    },
     lastEncounter: () => lastResult,
     resetBandit() {
       selector = createBandit(null);
@@ -356,6 +379,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       lines.push(`Navegación: ${NAVIGATION_LABELS[navigationMode]}`);
       if (navigationMode === 'astar' && navigator) {
         lines.push(`  planes ${navigator.stats.plans} · nodos ${navigator.stats.expanded}`);
+        lines.push('  rutas de A* en el minimapa');
       }
       lines.push(`Jefe: ${study ? 'ESTUDIO (brazo al azar)' : BOSS_DIRECTOR_LABELS[bossMode]}`);
       if (study) lines.push(`  encuentros guardados: ${study.encounters.length} · K exporta`);
