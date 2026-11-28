@@ -12,6 +12,7 @@ sobre todo, **las mide**:
 | Pieza | Algoritmo | Contra qué se compara |
 |---|---|---|
 | Rutas de los enemigos | A\* con vecindad de 8 casillas | La regla original (línea recta y rumbos al azar) |
+| Búsqueda del `STALKER` (estilo Alien: Isolation) | Filtro de partículas más un director con medidor de amenaza | La memoria del juego base y "última posición vista" |
 | Ataques del jefe | Expectimax con nodos de azar | La regla original y políticas triviales |
 | Ataques del jefe (comparación) | MCTS con UCT, lazo abierto, sobre el mismo modelo | Expectimax de profundidad 1 a 3 y la regla original |
 | Reto del encuentro con el jefe | Thompson sampling (bandido de nueve brazos) | Epsilon-voraz, UCB1, brazo fijo, azar y la regla original |
@@ -21,7 +22,9 @@ sobre todo, **las mide**:
 Todo se evalúa en un simulador determinista (M0) que corre el núcleo real del juego sin navegador. Cada cifra de este
 informe sale de un episodio simulado con semilla fija, con intervalo de confianza donde aplica.
 
-**Resultado en una línea por módulo.** A* sí ayuda a que los enemigos lleguen al jugador. Expectimax con el objetivo de
+**Resultado en una línea por módulo.** A* sí ayuda a que los enemigos lleguen al jugador. El acechador con filtro de
+partículas encuentra al bot escondido más rápido que la memoria honesta de "última posición vista" e iguala a la del
+juego base, que espía la posición real; su director produce ciclos de tensión y alivio (sección 4.1). Expectimax con el objetivo de
 daño es un resultado negativo (no le gana a "siempre el mismo ataque"); con el objetivo de ritmo sí acerca el daño a una
 meta. MCTS, sobre el mismo modelo, **no le gana a expectimax** en ninguna celda (otro resultado negativo, explicado en
 la sección 5). El bandido le gana a la regla original y al azar, pero no a un brazo fijo bien escogido ni a epsilon-voraz.
@@ -41,6 +44,7 @@ partidas con personas dependen de que se junten archivos del modo estudio (secci
 | Panel de IA en el juego y demo en línea | Hecho |
 | Coordinación de enemigos con anillo de aproximación y húngaro (plan de M1) | **No se hizo.** Se probó un flanqueo por penalización de rutas y no mostró efecto |
 | Dibujar las rutas de A\* en el juego (plan de la demo) | Hecho (27 nov): con el panel de IA abierto, el minimapa pinta la ruta que planeó cada enemigo |
+| Acechador estilo Alien: filtro de partículas y director con medidor de amenaza | Hecho (28 nov), medido en una arena de escondidas y conectado al juego (tecla `U`) |
 | MCTS con UCT para el jefe (plan de M2) | Hecho (28 nov), medido y conectado al juego. Resultado negativo: no le gana a expectimax |
 | M4 Bot que aprende con Q-learning | Hecho y medido en el simulador (no está conectado al juego). Resultado mixto |
 | M5 Narrador con salida estructurada | Hecho y medido con un modelo real: 20 % de respuestas válidas con el primer prompt (error propio) y 100 % con el corregido; el campo `tono` casi no varía |
@@ -88,6 +92,36 @@ originales siguen pasando sin cambios.
 enemigos alertados conocen su posición. Mide cuánto ayuda A\* a **llegar**, no cuánto mejora la partida. Con A\* los
 enemigos son notablemente más peligrosos; antes de activarlo por defecto haría falta revisar el balance con personas. Por
 eso la bandera arranca en la regla original.
+
+### 4.1 Acechador estilo Alien: Isolation
+
+**Problema.** Cuando un enemigo pierde de vista al jugador, el juego base lo manda durante 4.2 s a la "última posición
+conocida", pero esa posición se actualiza con la **real** mientras dura la memoria: espía. Después patrulla.
+
+**Método.** Dos IA, como en Alien: Isolation. El acechador (micro) mantiene una creencia de dónde está el jugador con un
+**filtro de partículas** (300 hipótesis; predicción con caminata al azar por celdas libres; observación negativa que
+descarta lo que ve vacío, con la misma línea de vista del juego; ver al jugador u oír un disparo concentra la nube) y va
+con A\* a la zona de más creencia. El **director** (macro) conoce la posición real y lleva un medidor de amenaza: al
+tope retira al acechador hasta que la amenaza baja (alivio) y, tras 6 s sin contacto, le da una pista con ruido. Se midió
+en una arena de escondidas con el mapa real de tres niveles, contra la regla del juego y contra "última posición vista".
+Parámetros fijados antes de medir, desarrollo con semillas 1 a 20 y prueba con 10001 a 10100. La prueba se corrió dos
+veces: la segunda tras corregir un error (la primera pista llegaba en el primer instante), sin cambiar parámetros ni
+conclusiones. Detalle en [`docs/ACECHADOR.md`](docs/ACECHADOR.md); tablas en
+[`resultados/bench-acechador.md`](resultados/bench-acechador.md).
+
+**Resultados** (100 semillas por nivel, diferencias pareadas con IC95):
+
+- Tiempo para volver a ver al bot: el filtro de partículas le gana a "última posición vista" en los tres niveles
+  (−3.3, −1.8 y −3.3 s) y **empata** con la regla del juego base, que espía, en dos de tres (en el tercero gana por 2.4 s).
+- El director aumenta los ciclos de tensión y alivio en los tres niveles (+0.36 a +0.80 por episodio de 120 s). Donde la
+  amenaza se quedaba pegada arriba (`glass-cistern`, 40 % del tiempo en 0.9 o más) la baja 12 puntos y reduce las
+  atrapadas a menos de la mitad; en `access-node` sus pistas hacen que encuentre más; en `relay-catacomb` no cambia nada
+  más que los ciclos.
+
+**Límites.** La arena no es el juego (sin daño, armas ni el oído a través de paredes del juego, que sigue mandando en la
+partida); el bot que se esconde es simple; las pistas del director usan la posición real con ruido, así que la
+comparación honesta de búsqueda es partículas contra "última posición vista"; ciclos de tensión no es lo mismo que
+diversión, y eso solo se mide con personas.
 
 ## 5. M2: expectimax para el jefe
 
@@ -275,7 +309,7 @@ original. Teclas `I`, `U`, `O` y parámetro `?ia=` de la URL; detalle y límites
 El bandido en el juego elige un brazo cuando aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si
 el jefe cae, guarda su creencia en el navegador y empieza otra ventana.
 
-**Qué se verificó.** Pruebas unitarias del runtime (14) y de todo el proyecto (841 en total, en 116 archivos). En el demo desplegado se
+**Qué se verificó.** Pruebas unitarias del runtime (14) y de todo el proyecto (853 en total, en 117 archivos). En el demo desplegado se
 comprobó que A\* planifica rutas (8 planes y 74 nodos en los primeros segundos), que el bandido elige un brazo al aparecer
 el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisión en vivo (1.15 ms por decisión).
 
@@ -336,11 +370,12 @@ arriba; se declaran para que el código de esas carpetas no quede sin explicar:
 
 ```bash
 npm ci
-npm test                             # 116 archivos, 841 pruebas
+npm test                             # 117 archivos, 853 pruebas
 npm run bench:sim
 npm run bench:nav
 npm run bench:boss -- --seeds 40     # varios minutos
 npm run bench:mcts                   # MCTS contra expectimax, unos 15 minutos
+npm run bench:acechador              # acechador estilo Alien, unos 3 minutos
 npm run bench:director -- --rebuild  # poco más de un minuto; regenera resultados/ idénticos (verificado el 25-nov)
 npm run bench:director-knobs
 npm run bench:qlearn                 # M4: unos 4 minutos

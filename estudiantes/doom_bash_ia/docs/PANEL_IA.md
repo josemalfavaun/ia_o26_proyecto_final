@@ -8,10 +8,10 @@ Las IA del proyecto (A*, expectimax, MCTS y bandido) se pueden activar mientras 
 | Tecla | Qué hace |
 |---|---|
 | `I` | Muestra u oculta el panel de IA (esquina superior derecha). |
-| `U` | Cambia la navegación de enemigos: regla original, A*. |
+| `U` | Cambia la navegación de enemigos: regla original, A*, A* + acechador (detalle en [`ACECHADOR.md`](ACECHADOR.md)). |
 | `O` | Cambia el director del jefe: regla original, expectimax, MCTS, bandido Thompson. |
 
-También se pueden fijar desde la URL: `?ia=astar,bandido` (acepta `astar`, `legacy`, `expectimax`, `mcts`, `bandido`, `regla`).
+También se pueden fijar desde la URL: `?ia=astar,bandido` (acepta `astar`, `acechador`, `legacy`, `expectimax`, `mcts`, `bandido`, `regla`).
 La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan en `localStorage` del navegador.
 
 ## Qué muestra el panel
@@ -20,6 +20,9 @@ La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan
   panel está abierto, el minimapa dibuja en verde la ruta vigente de cada enemigo que persigue (de su posición a la
   meta, por los centros de celda que eligió A\*).
 - **Expectimax**: la última decisión del jefe, los tres ataques con mejor valor esperado y los milisegundos por decisión.
+- **Acechador** (modo A* + acechador): por cada `STALKER` vivo, una barra con su medidor de amenaza, la fase (acecho o
+  retirada), las pistas del director y las retiradas. El minimapa pinta su nube de partículas: magenta en acecho, azul en
+  retirada.
 - **MCTS**: la última decisión, las iteraciones y el horizonte, las visitas de las tres ramas más buscadas y los
   milisegundos por decisión (detalle en [`MCTS.md`](MCTS.md)).
 - **Bandido**: el brazo en juego (meta de daño por salva), cuánto va de la ventana de 40 s, la media y el número de veces

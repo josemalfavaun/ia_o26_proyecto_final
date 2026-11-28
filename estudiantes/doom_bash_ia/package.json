@@ -28,6 +28,7 @@
     "bench:nav": "tsx scripts/bench-nav.ts",
     "bench:boss": "tsx scripts/bench-boss.ts",
     "bench:mcts": "tsx scripts/bench-mcts.ts",
+    "bench:acechador": "tsx scripts/bench-acechador.ts",
     "bench:director": "tsx scripts/bench-director.ts",
     "bench:director-knobs": "tsx scripts/bench-director-knobs.ts",
     "bench:qlearn": "tsx scripts/bench-qlearn.ts",

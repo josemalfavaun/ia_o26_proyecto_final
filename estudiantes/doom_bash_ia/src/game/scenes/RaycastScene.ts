@@ -465,6 +465,8 @@ export class RaycastScene extends Phaser.Scene {
   /** Modo estudio: ya se mostró el aviso de consentimiento en esta sesión (una negativa no se vuelve a preguntar). */
   private studyConsentAsked = false;
   private aiPanelVisible = false;
+  /** El jugador disparó desde el último cuadro (lo oye el acechador estilo Alien). */
+  private aiShotSinceLastFrame = false;
   private aiPanelRefreshAt = 0;
   private frameStats: RaycastFrameStatsState = createRaycastFrameStatsState();
   private narrationOverlay!: RaycastNarrationOverlay;
@@ -720,7 +722,8 @@ export class RaycastScene extends Phaser.Scene {
   private readonly handleCycleAiNavigation = (): void => {
     if (this.gamePaused || !this.aiRuntime) return;
     const mode = this.aiRuntime.cycleNavigation();
-    this.setCombatMessage(`IA // NAVEGACIÓN: ${mode === 'astar' ? 'A*' : 'REGLA ORIGINAL'}`, 1400);
+    const label = mode === 'astar' ? 'A*' : mode === 'acechador' ? 'A* + ACECHADOR' : 'REGLA ORIGINAL';
+    this.setCombatMessage(`IA // NAVEGACIÓN: ${label}`, 1400);
     this.aiPanelRefreshAt = 0;
   };
 
@@ -2411,6 +2414,7 @@ export class RaycastScene extends Phaser.Scene {
     }
 
     notifyRaycastGunfire(this.enemies, this.player.x, this.player.y, this.time.now);
+    this.aiShotSinceLastFrame = true;
 
     this.runPelletsFired += result.pelletCount;
     if (this.getLiveBosses().length > 0) {
@@ -3345,6 +3349,16 @@ export class RaycastScene extends Phaser.Scene {
     const activatedTelegraphs = this.enemies
       .filter((enemy) => didRaycastEnemyFinishTelegraph(enemy, previousTime, this.time.now))
       .map((enemy) => enemy.id);
+    const stalkers = this.aiRuntime?.stalkers();
+    stalkers?.tick({
+      map: this.map,
+      enemies: this.enemies,
+      player: { x: this.player.x, y: this.player.y, alive: this.playerAlive },
+      timeMs: this.time.now,
+      deltaMs: delta,
+      playerFired: this.aiShotSinceLastFrame
+    });
+    this.aiShotSinceLastFrame = false;
     const enemyResult = updateRaycastEnemies(
       this.map,
       this.enemies,
@@ -3355,7 +3369,8 @@ export class RaycastScene extends Phaser.Scene {
         speedMultiplier:
           (this.activeLevelEvent.effects.enemySpeedMultiplier ?? 1) * (this.runModifier?.effects.enemySpeedMul ?? 1),
         projectileSpeedMultiplier: this.activeLevelEvent.effects.enemyProjectileSpeedMultiplier ?? 1,
-        navigator: this.aiRuntime?.navigator()
+        navigator: this.aiRuntime?.navigator(),
+        searchGoal: stalkers?.searchGoal
       }
     );
     if (enemyResult.flashActivations.length > 0) {
@@ -4495,6 +4510,21 @@ export class RaycastScene extends Phaser.Scene {
     return this.minimapStaticCells;
   }
 
+  /** Con el panel de IA abierto y modo acechador, pinta la nube de partículas: dónde cree cada acechador que estás. */
+  private drawMinimapStalkerBeliefs(offsetX: number, offsetY: number, tileSize: number): void {
+    const views = this.aiRuntime?.stalkers()?.views() ?? [];
+    if (views.length === 0) return;
+    const g = this.minimapGraphics;
+    const size = Math.max(1.5, tileSize * 0.24);
+    for (const view of views) {
+      if (!view.particlesX || !view.particlesY) continue;
+      g.fillStyle(view.phase === 'retirada' ? 0x7fb2ff : 0xff5fd2, 0.8);
+      for (let i = 0; i < view.particlesX.length; i += 2) {
+        g.fillRect(offsetX + view.particlesX[i] * tileSize - size / 2, offsetY + view.particlesY[i] * tileSize - size / 2, size, size);
+      }
+    }
+  }
+
   /** Con el panel de IA abierto y navegación A*, pinta la ruta que cada enemigo planeó (M1). */
   private drawMinimapNavigationRoutes(offsetX: number, offsetY: number, tileSize: number): void {
     const routes = this.aiRuntime?.navigationRoutes(this.enemies) ?? [];
@@ -4576,6 +4606,7 @@ export class RaycastScene extends Phaser.Scene {
     });
 
     if (this.aiPanelVisible) this.drawMinimapNavigationRoutes(offsetX, offsetY, tileSize);
+    if (this.aiPanelVisible) this.drawMinimapStalkerBeliefs(offsetX, offsetY, tileSize);
 
     for (let mi = 0; mi < model.markers.length; mi += 1) {
       const marker = model.markers[mi];

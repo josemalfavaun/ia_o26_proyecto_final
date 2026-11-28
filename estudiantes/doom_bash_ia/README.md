@@ -32,7 +32,7 @@ Sin Docker, para desarrollar (Node 22):
 ```bash
 npm ci
 npm run dev          # juego en http://localhost:5173
-npm test             # pruebas unitarias (vitest): 116 archivos, 841 pruebas
+npm test             # pruebas unitarias (vitest): 117 archivos, 853 pruebas
 npm run lint
 ```
 
@@ -43,10 +43,10 @@ Por omisión todo está apagado y el juego se comporta como el original. Se acti
 | Tecla | Qué hace |
 |---|---|
 | `I` | Muestra u oculta el panel de IA (esquina superior derecha) |
-| `U` | Navegación de enemigos: regla original o A* |
+| `U` | Navegación de enemigos: regla original, A* o A* + acechador estilo Alien (filtro de partículas y director de amenaza) |
 | `O` | Director del jefe: regla original, expectimax, MCTS o bandido Thompson |
 
-También con la URL: `?ia=astar,bandido` (acepta `astar`, `legacy`, `expectimax`, `mcts`, `bandido`, `regla`). Los modos y lo que
+También con la URL: `?ia=astar,bandido` (acepta `astar`, `acechador`, `legacy`, `expectimax`, `mcts`, `bandido`, `regla`). Los modos y lo que
 aprende el bandido se guardan en el navegador. Detalles en [`docs/PANEL_IA.md`](docs/PANEL_IA.md).
 
 ## Pantallas y atajos para la presentación
@@ -68,6 +68,7 @@ aprende el bandido se guardan en el navegador. Detalles en [`docs/PANEL_IA.md`](
 | Narrador con LLM local (Ollama) | Heredado, opcional | `server/src/gameMaster.ts` | |
 | M0 Simulador sin cabeza, determinista, con bots de referencia | Hecho y medido | `src/ai/sim/` | [`docs/SIMULADOR.md`](docs/SIMULADOR.md) |
 | M1 Navegación de enemigos con A* | Hecho y medido; conectado al juego | `src/ai/astar/` | [`docs/NAVEGACION.md`](docs/NAVEGACION.md) |
+| Acechador estilo Alien: Isolation (filtro de partículas y director con medidor de amenaza) | Hecho y medido en una arena de escondidas; conectado al juego | `src/ai/stalker/` | [`docs/ACECHADOR.md`](docs/ACECHADOR.md) |
 | M2 Jefe con expectimax | Hecho y medido; conectado al juego. Resultado mixto | `src/ai/expectimax/` | [`docs/JEFE.md`](docs/JEFE.md) |
 | M2b Jefe con MCTS y UCT, contra expectimax | Hecho y medido; conectado al juego. Resultado negativo (no le gana a expectimax) | `src/ai/mcts/` | [`docs/MCTS.md`](docs/MCTS.md) |
 | M3 Director adaptativo (Thompson sampling) | Hecho y medido; conectado al juego. Resultado mixto | `src/ai/bandit/` | [`docs/DIRECTOR.md`](docs/DIRECTOR.md) |
@@ -83,6 +84,7 @@ npm run bench:sim                    # M0: bots de referencia (varios minutos)
 npm run bench:nav                    # M1: algoritmos de ruta y persecución
 npm run bench:boss -- --seeds 40     # M2: jefe (varios minutos)
 npm run bench:mcts                   # M2b: MCTS contra expectimax (unos 15 minutos; `-- --test 20` más rápido)
+npm run bench:acechador              # acechador estilo Alien (unos 3 minutos)
 npm run bench:director               # M3: usa resultados/director-tabla.json si existe
 npm run bench:director -- --rebuild  # M3: vuelve a simular la tabla (poco más de un minuto)
 npm run bench:director-knobs         # M3: el resultado negativo del director de spawns

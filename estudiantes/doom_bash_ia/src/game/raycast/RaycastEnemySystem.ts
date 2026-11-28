@@ -64,6 +64,21 @@ export interface RaycastEnemyRuntimeModifiers {
   projectileSpeedMultiplier?: number;
   /** Opcional: navegación por rutas. Sin él, los enemigos se mueven con la regla original. */
   navigator?: RaycastEnemyNavigator;
+  /**
+   * Opcional: a dónde ir cuando el enemigo NO tiene al jugador detectado (lo usa el acechador estilo Alien).
+   * Si devuelve un punto, sustituye a la memoria de "última posición conocida" y a la patrulla. Con
+   * `ignorePlayer`, el enemigo se comporta como si no detectara al jugador (retirada del director).
+   * Sin él, o si devuelve null, todo funciona exactamente como antes.
+   */
+  searchGoal?: (enemy: RaycastEnemy, time: number) => RaycastSearchGoal | null;
+}
+
+export interface RaycastSearchGoal {
+  x: number;
+  y: number;
+  ignorePlayer?: boolean;
+  /** Fracción de la velocidad de persecución (por omisión 0.7). */
+  speedFactor?: number;
 }
 
 export function computeRaycastEnemyPlayerAwareness(
@@ -130,7 +145,9 @@ export function updateRaycastEnemies(
       return;
     }
 
-    const { aware } = computeRaycastEnemyPlayerAwareness(hasSight, distance, config.detectionRange);
+    const search = modifiers.searchGoal?.(enemy, time) ?? null;
+    const awareness = computeRaycastEnemyPlayerAwareness(hasSight, distance, config.detectionRange);
+    const aware = search?.ignorePlayer ? false : awareness.aware;
     if (enemy.kind === 'FLASHER' && aware && hasSight && distance <= 3.1) {
       const nextFlashAt = enemy.flashCooldownUntil ?? 0;
       if (time >= nextFlashAt) {
@@ -160,6 +177,22 @@ export function updateRaycastEnemies(
     if (decision.action === 'IDLE') {
       enemy.attackWindupStartedAt = 0;
       enemy.attackWindupUntil = 0;
+
+      if (search) {
+        const searchSpeed = (config.speed / GRID_SCALE) * (search.speedFactor ?? 0.7);
+        const plannedSearch = modifiers.navigator?.steer(map, enemy, enemies, search.x, search.y, time);
+        const searchHeading = plannedSearch
+          ? 0
+          : pickOpenRoamHeadingToward(map, enemy.x, enemy.y, enemy.radius, search.x, search.y);
+        moveEnemy(
+          map,
+          enemy,
+          plannedSearch ?? { x: Math.cos(searchHeading), y: Math.sin(searchHeading) },
+          searchSpeed * (modifiers.speedMultiplier ?? 1) * (enemy.speedMultiplier ?? 1),
+          deltaMs
+        );
+        return;
+      }
 
       if (time < enemy.alertUntilTime || isRaycastMemoryActive(enemy, time)) {
         const distLK = Math.hypot(enemy.lastKnownPlayerX - enemy.x, enemy.lastKnownPlayerY - enemy.y);

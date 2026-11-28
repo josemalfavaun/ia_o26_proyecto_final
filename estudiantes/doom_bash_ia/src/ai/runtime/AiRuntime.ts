@@ -16,18 +16,24 @@ import { challengeReward } from '../bandit/reward';
 import { createSeededRng } from '../sim/rng';
 import type { ExpectimaxBossPolicy } from '../expectimax/policy';
 import { createMctsBossPolicy, type MctsBossPolicy } from '../mcts/policy';
+import { createStalkerManager, type StalkerManager } from '../stalker/manager';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastEnemyNavigator } from '../../game/raycast/RaycastEnemyNavigator';
 import type { RaycastEnemy } from '../../game/raycast/RaycastEnemy';
 import type { Waypoint } from '../astar/search';
 
-export type NavigationMode = 'legacy' | 'astar';
+/** 'acechador': A* para todos y, además, los STALKER se comportan como el alien de Alien: Isolation. */
+export type NavigationMode = 'legacy' | 'astar' | 'acechador';
 export type BossDirectorMode = 'rule' | 'expectimax' | 'mcts' | 'bandit';
 
-export const NAVIGATION_MODES: readonly NavigationMode[] = ['legacy', 'astar'];
+export const NAVIGATION_MODES: readonly NavigationMode[] = ['legacy', 'astar', 'acechador'];
 export const BOSS_DIRECTOR_MODES: readonly BossDirectorMode[] = ['rule', 'expectimax', 'mcts', 'bandit'];
 
-export const NAVIGATION_LABELS: Record<NavigationMode, string> = { legacy: 'regla original', astar: 'A*' };
+export const NAVIGATION_LABELS: Record<NavigationMode, string> = {
+  legacy: 'regla original',
+  astar: 'A*',
+  acechador: 'A* + acechador'
+};
 export const BOSS_DIRECTOR_LABELS: Record<BossDirectorMode, string> = {
   rule: 'regla original',
   expectimax: 'expectimax (ritmo 4)',
@@ -138,6 +144,7 @@ export function parseAiQuery(query: string): { navigation?: NavigationMode; boss
   const result: { navigation?: NavigationMode; boss?: BossDirectorMode } = {};
   for (const token of (params.get('ia') ?? '').split(',').map((entry) => entry.trim().toLowerCase())) {
     if (token === 'astar' || token === 'a*') result.navigation = 'astar';
+    else if (token === 'acechador' || token === 'alien' || token === 'stalker') result.navigation = 'acechador';
     else if (token === 'legacy' || token === 'original') result.navigation = 'legacy';
     else if (token === 'expectimax') result.boss = 'expectimax';
     else if (token === 'mcts') result.boss = 'mcts';
@@ -190,6 +197,8 @@ export interface AiRuntime {
   readonly bossMode: BossDirectorMode;
   /** Navegador para pasar a `updateRaycastEnemies`, o `undefined` en modo original. */
   navigator(): RaycastEnemyNavigator | undefined;
+  /** Acechadores estilo Alien (modo 'acechador'), o `undefined` en los demás modos. */
+  stalkers(): StalkerManager | undefined;
   /** Política para pasar a `tickRaycastBossVolleys`, o `undefined` en modo original. */
   bossPolicy(): RaycastBossPolicy | undefined;
   cycleNavigation(): NavigationMode;
@@ -235,6 +244,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
     fromQuery.boss ?? (isModeValue(storedModes?.boss, BOSS_DIRECTOR_MODES) ? storedModes.boss : 'rule');
 
   let navigator: AStarNavigator | null = null;
+  let stalkerManager: StalkerManager | null = null;
   let expectimax: (RaycastBossPolicy & ExpectimaxBossPolicy) | null = null;
   let mcts: MctsBossPolicy | null = null;
   let selector: ThompsonSelector = createBandit(validCounts(readJson(storage, BANDIT_KEY), arms));
@@ -326,13 +336,19 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       return bossMode;
     },
     navigator() {
-      if (navigationMode !== 'astar') return undefined;
+      if (navigationMode === 'legacy') return undefined;
       navigator ??= createAStarNavigator();
       return navigator;
+    },
+    stalkers() {
+      if (navigationMode !== 'acechador') return undefined;
+      stalkerManager ??= createStalkerManager(seed);
+      return stalkerManager;
     },
     bossPolicy: () => currentPolicy(),
     cycleNavigation() {
       navigationMode = NAVIGATION_MODES[(NAVIGATION_MODES.indexOf(navigationMode) + 1) % NAVIGATION_MODES.length];
+      stalkerManager = null;
       saveModes();
       return navigationMode;
     },
@@ -365,7 +381,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       previousBossAlive = frame.bossAlive;
     },
     navigationRoutes(enemies) {
-      if (navigationMode !== 'astar' || !navigator) return [];
+      if (navigationMode === 'legacy' || !navigator) return [];
       const views: NavigationRouteView[] = [];
       for (const enemy of enemies) {
         if (!enemy.alive) continue;
@@ -400,9 +416,20 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       const lines: string[] = [];
       lines.push('IA   I cierra · U navegación · O jefe');
       lines.push(`Navegación: ${NAVIGATION_LABELS[navigationMode]}`);
-      if (navigationMode === 'astar' && navigator) {
+      if (navigationMode !== 'legacy' && navigator) {
         lines.push(`  planes ${navigator.stats.plans} · nodos ${navigator.stats.expanded}`);
         lines.push('  rutas de A* en el minimapa');
+      }
+      if (navigationMode === 'acechador') {
+        const views = stalkerManager?.views() ?? [];
+        if (views.length === 0) lines.push('  acechadores: ninguno vivo en este nivel');
+        for (const view of views.slice(0, 2)) {
+          const filled = Math.round(view.menace * 10);
+          lines.push(
+            `  ${view.enemyId.slice(0, 12).padEnd(12)} amenaza [${'#'.repeat(filled)}${'-'.repeat(10 - filled)}] ${view.phase}`
+          );
+          lines.push(`    pistas ${view.hints} · retiradas ${view.retreats} · partículas en el minimapa`);
+        }
       }
       lines.push(`Jefe: ${study ? 'ESTUDIO (brazo al azar)' : BOSS_DIRECTOR_LABELS[bossMode]}`);
       if (study) lines.push(`  encuentros guardados: ${study.encounters.length} · K exporta`);
