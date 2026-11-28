@@ -17,6 +17,12 @@ import type { RaycastBossState } from '../../game/raycast/RaycastBoss';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastMap } from '../../game/raycast/RaycastMap';
 import {
+  createDeficitTracker,
+  persistenceProbabilities,
+  scoreStep,
+  type BossObjective
+} from './objective';
+import {
   classifyPlayerMotion,
   createModelContext,
   evaluateVolley,
@@ -48,16 +54,12 @@ export interface ExpectimaxOptions {
    * `targetDamage` por salva, de modo que si el jugador ha recibido de menos el jefe sube la presión y, si
    * ha recibido de más, la baja. El déficit acumulado hace que mirar más de una salva importe.
    */
-  objective?: 'damage' | 'pacing';
+  objective?: BossObjective;
   /** Daño meta por salva (solo 'pacing'). */
   targetDamage?: number;
 }
 
-const PRIOR: Record<PlayerResponse, number> = { stand: 0.06, left: 0.28, right: 0.28, toward: 0.17, away: 0.21 };
-const PERSIST_MASS = 0.5;
 const COUNT_DECAY = 0.82;
-/** El déficit acumulado se acota para que una mala racha no domine el resto del combate. */
-const DEFICIT_LIMIT = 100;
 
 export interface ExpectimaxStats {
   decisions: number;
@@ -70,7 +72,7 @@ export interface ExpectimaxStats {
 export interface ExpectimaxDecision {
   kind: BossVolleyKind;
   /** Valor esperado (daño) de cada ataque candidato. */
-  values: Array<{ kind: BossVolleyKind; value: number }>;
+  values: Array<{ kind: BossVolleyKind; value: number; visits?: number }>;
 }
 
 export interface ExpectimaxBossPolicy extends RaycastBossPolicy {
@@ -119,20 +121,10 @@ export function createExpectimaxBossPolicy(options: ExpectimaxOptions = {}): Exp
   let valueMemo = new Map<DuelState, Map<number, number>>();
   const objective = options.objective ?? 'damage';
   const target = options.targetDamage ?? 6;
-  const damageSeen = new Map<string, number>();
-  const lastHealth = new Map<string, number>();
-  const deficits = new Map<string, number>();
+  const deficitTracker = createDeficitTracker(objective, target);
 
   function probabilities(bossId: string, state: DuelState): Record<PlayerResponse, number> {
-    const current = classifyPlayerMotion(state);
-    const mixed = {} as Record<PlayerResponse, number>;
-    let total = 0;
-    for (const response of PLAYER_RESPONSES) {
-      const persistence = response === current ? PERSIST_MASS : 0;
-      mixed[response] = persistence + (1 - PERSIST_MASS) * PRIOR[response];
-      total += mixed[response];
-    }
-    for (const response of PLAYER_RESPONSES) mixed[response] /= total;
+    const mixed = persistenceProbabilities(state);
     if (!adaptive) return mixed;
 
     const seen = counts.get(bossId);
@@ -156,9 +148,7 @@ export function createExpectimaxBossPolicy(options: ExpectimaxOptions = {}): Exp
 
   /** Puntaje de un nodo: más alto es mejor. 'damage' suma daño; 'pacing' penaliza la desviación del ritmo. */
   function stepScore(deficit: number, damage: number): { score: number; nextDeficit: number } {
-    if (objective === 'damage') return { score: damage, nextDeficit: 0 };
-    const nextDeficit = Math.max(-DEFICIT_LIMIT, Math.min(DEFICIT_LIMIT, deficit + target - damage));
-    return { score: -(nextDeficit * nextDeficit), nextDeficit };
+    return scoreStep(objective, target, deficit, damage);
   }
 
   function value(ctx: ModelContext, state: DuelState, deficit: number, candidates: BossVolleyKind[], remaining: number): number {
@@ -202,25 +192,6 @@ export function createExpectimaxBossPolicy(options: ExpectimaxOptions = {}): Exp
     return q;
   }
 
-  /** Actualiza el déficit con el daño que el jugador recibió desde la decisión anterior. */
-  function updateDeficit(boss: RaycastBossState, player: RaycastBossPlayerContext): number {
-    if (objective !== 'pacing') return 0;
-    const id = boss.id;
-    const known = deficits.get(id);
-    let received = 0;
-    if (player.damageTaken !== undefined) {
-      received = Math.max(0, player.damageTaken - (damageSeen.get(id) ?? player.damageTaken));
-      damageSeen.set(id, player.damageTaken);
-    } else if (player.health !== undefined) {
-      received = Math.max(0, (lastHealth.get(id) ?? player.health) - player.health);
-      lastHealth.set(id, player.health);
-    }
-    // La primera decisión no tiene salva previa que contar.
-    const next = known === undefined ? 0 : Math.max(-DEFICIT_LIMIT, Math.min(DEFICIT_LIMIT, known + target - received));
-    deficits.set(id, next);
-    return next;
-  }
-
   return {
     stats,
     lastDecision: () => last,
@@ -255,7 +226,7 @@ export function createExpectimaxBossPolicy(options: ExpectimaxOptions = {}): Exp
 
       const ctx = createModelContext(map, boss, options.params);
       valueMemo = new Map();
-      const deficit = updateDeficit(boss, player);
+      const deficit = deficitTracker.update(boss, player);
       const probs = probabilities(boss.id, state);
       const values = candidates.map((kind) => ({
         kind,
