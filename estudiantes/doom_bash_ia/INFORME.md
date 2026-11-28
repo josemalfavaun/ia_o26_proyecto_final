@@ -13,6 +13,7 @@ sobre todo, **las mide**:
 |---|---|---|
 | Rutas de los enemigos | A\* con vecindad de 8 casillas | La regla original (línea recta y rumbos al azar) |
 | Ataques del jefe | Expectimax con nodos de azar | La regla original y políticas triviales |
+| Ataques del jefe (comparación) | MCTS con UCT, lazo abierto, sobre el mismo modelo | Expectimax de profundidad 1 a 3 y la regla original |
 | Reto del encuentro con el jefe | Thompson sampling (bandido de nueve brazos) | Epsilon-voraz, UCB1, brazo fijo, azar y la regla original |
 | Bot que juega (en el simulador) | Q-learning tabular jerárquico | Bot guionado, azar y quieto |
 | Narrador con modelo local | Salida JSON validada con respaldo | Narrador de texto libre del juego base (medido: formato válido en 60 de 60 tras corregir el prompt) |
@@ -22,7 +23,8 @@ informe sale de un episodio simulado con semilla fija, con intervalo de confianz
 
 **Resultado en una línea por módulo.** A* sí ayuda a que los enemigos lleguen al jugador. Expectimax con el objetivo de
 daño es un resultado negativo (no le gana a "siempre el mismo ataque"); con el objetivo de ritmo sí acerca el daño a una
-meta. El bandido le gana a la regla original y al azar, pero no a un brazo fijo bien escogido ni a epsilon-voraz.
+meta. MCTS, sobre el mismo modelo, **no le gana a expectimax** en ninguna celda (otro resultado negativo, explicado en
+la sección 5). El bandido le gana a la regla original y al azar, pero no a un brazo fijo bien escogido ni a epsilon-voraz.
 El Q-learning aprende a **sobrevivir** al jefe (recibe un tercio del daño del bot guionado) pero no a vencerlo, y su
 resultado depende de cómo se escriba la recompensa. El narrador estructurado cumple el formato en 60 de 60 llamadas
 con un modelo real tras corregir un error del prompt (20 % con el primero); el campo `tono` casi no varía. **Todas las cifras de este informe vienen del simulador; las
@@ -39,7 +41,7 @@ partidas con personas dependen de que se junten archivos del modo estudio (secci
 | Panel de IA en el juego y demo en línea | Hecho |
 | Coordinación de enemigos con anillo de aproximación y húngaro (plan de M1) | **No se hizo.** Se probó un flanqueo por penalización de rutas y no mostró efecto |
 | Dibujar las rutas de A\* en el juego (plan de la demo) | Hecho (27 nov): con el panel de IA abierto, el minimapa pinta la ruta que planeó cada enemigo |
-| MCTS con UCT para el jefe (plan de M2) | **No se hizo**; solo expectimax |
+| MCTS con UCT para el jefe (plan de M2) | Hecho (28 nov), medido y conectado al juego. Resultado negativo: no le gana a expectimax |
 | M4 Bot que aprende con Q-learning | Hecho y medido en el simulador (no está conectado al juego). Resultado mixto |
 | M5 Narrador con salida estructurada | Hecho y medido con un modelo real: 20 % de respuestas válidas con el primer prompt (error propio) y 100 % con el corregido; el campo `tono` casi no varía |
 | Modo estudio para partidas con personas | Hecho y probado; **datos reales: aún no hay** |
@@ -130,6 +132,29 @@ modelo del jugador está calibrado a mano contra el mismo simulador, lo que intr
 1, 2 y 3 los resultados quedan dentro del mismo intervalo de confianza, así que no se puede decir que mirar más lejos
 mejora; solo que no empeora y cuesta poco. Con un jugador quieto en volt-archon ni el ataque más débil baja el daño a la
 meta.
+
+### 5.1 MCTS con UCT contra expectimax
+
+**Método.** MCTS de lazo abierto sobre el **mismo** modelo del duelo, con el mismo modelo del jugador y el mismo
+objetivo (las piezas compartidas se extrajeron a `src/ai/expectimax/objective.ts`; `bench:boss` da un CSV idéntico antes
+y después). En cada iteración baja por el árbol con UCT, sortea la respuesta del jugador, expande un ataque, completa el
+horizonte con ataques al azar y retropropaga el retorno descontado; al final lanza el ataque más visitado. Ajuste de c y
+del horizonte con las semillas 1 a 20; prueba una sola vez con las semillas 10001 a 10100 (100), con el jugador guionado y
+el aleatorio. Detalle en [`docs/MCTS.md`](docs/MCTS.md); tablas en [`resultados/bench-mcts.md`](resultados/bench-mcts.md).
+
+**Resultado negativo.** Con 256 iteraciones, MCTS produce menos daño por salva que la mejor profundidad de expectimax en
+5 de 6 celdas (de −0.74 a −1.68, IC95 sin el cero; la sexta no es significativa) y un error de ritmo mayor en 4 de 6
+(de +0.20 a +1.24; las otras dos no son significativas). Con 1024 iteraciones se acerca y empata en algunas celdas,
+pero nunca supera a expectimax, y gasta unas 2,000 evaluaciones del modelo por decisión contra 30 a 40 de expectimax
+de profundidad 1.
+
+**Por qué.** Es la misma razón por la que expectimax de profundidad 1, 2 y 3 da lo mismo: mirar más adelante no aporta
+en este duelo, y con 6 a 8 ataques y 5 respuestas el árbol de una salva se recorre completo por muy poco. La ventaja de
+MCTS (concentrar la búsqueda en árboles enormes y profundos) no aplica aquí, y sortear la respuesta del jugador en vez
+de promediarla le agrega ruido. En el ajuste, ninguna combinación de c y horizonte se distinguió de las demás.
+
+**Límites.** Hereda la circularidad del modelo de M2; la rejilla de ajuste fue chica (c = 1.4 quedó en el borde); no se
+probó MCTS sobre el simulador completo.
 
 ## 6. M3: bandido para el reto del encuentro
 
@@ -250,7 +275,7 @@ original. Teclas `I`, `U`, `O` y parámetro `?ia=` de la URL; detalle y límites
 El bandido en el juego elige un brazo cuando aparece el jefe, cierra el encuentro a los 40 s, si el jugador muere o si
 el jefe cae, guarda su creencia en el navegador y empieza otra ventana.
 
-**Qué se verificó.** Pruebas unitarias del runtime (13) y de todo el proyecto (836 en total, en 115 archivos). En el demo desplegado se
+**Qué se verificó.** Pruebas unitarias del runtime (14) y de todo el proyecto (841 en total, en 116 archivos). En el demo desplegado se
 comprobó que A\* planifica rutas (8 planes y 74 nodos en los primeros segundos), que el bandido elige un brazo al aparecer
 el jefe (se vio `ritmo-12`, ventana 6/40 s) y que expectimax muestra su decisión en vivo (1.15 ms por decisión).
 
@@ -311,10 +336,11 @@ arriba; se declaran para que el código de esas carpetas no quede sin explicar:
 
 ```bash
 npm ci
-npm test                             # 115 archivos, 836 pruebas
+npm test                             # 116 archivos, 841 pruebas
 npm run bench:sim
 npm run bench:nav
 npm run bench:boss -- --seeds 40     # varios minutos
+npm run bench:mcts                   # MCTS contra expectimax, unos 15 minutos
 npm run bench:director -- --rebuild  # poco más de un minuto; regenera resultados/ idénticos (verificado el 25-nov)
 npm run bench:director-knobs
 npm run bench:qlearn                 # M4: unos 4 minutos

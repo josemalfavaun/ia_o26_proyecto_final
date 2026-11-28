@@ -47,6 +47,8 @@ describe('runtime de IA del juego', () => {
     expect(runtime.navigator()).toBeDefined();
     expect(runtime.cycleBossDirector()).toBe('expectimax');
     expect(runtime.bossPolicy()).toBeDefined();
+    expect(runtime.cycleBossDirector()).toBe('mcts');
+    expect(runtime.bossPolicy()).toBeDefined();
     expect(runtime.cycleBossDirector()).toBe('bandit');
     expect(runtime.cycleBossDirector()).toBe('rule');
     runtime.cycleBossDirector();
@@ -58,6 +60,7 @@ describe('runtime de IA del juego', () => {
   it('la URL manda sobre lo guardado y descarta lo desconocido', () => {
     expect(parseAiQuery('?ia=astar,bandido')).toEqual({ navigation: 'astar', boss: 'bandit' });
     expect(parseAiQuery('ia=foo,expectimax')).toEqual({ boss: 'expectimax' });
+    expect(parseAiQuery('ia=astar,mcts')).toEqual({ navigation: 'astar', boss: 'mcts' });
     expect(parseAiQuery('')).toEqual({});
     const storage = memoryStorage({ 'doom-bash-ia:modos:v1': JSON.stringify({ navigation: 'astar', boss: 'expectimax' }) });
     const runtime = createAiRuntime({ storage, query: '?ia=legacy,regla', seed: 1 });
@@ -149,6 +152,29 @@ describe('runtime de IA del juego', () => {
     const lines = runtime.panelLines(frame());
     expect(lines.join('\n')).toContain('expectimax');
     expect(lines.length).toBeGreaterThan(2);
+  });
+});
+
+describe('modo MCTS del jefe', () => {
+  it('el panel muestra iteraciones y visitas después de una decisión', async () => {
+    const { createSimWorld } = await import('../ai/sim/SimWorld');
+    const { RAYCAST_LEVEL_BOSS } = await import('../game/raycast/RaycastLevel');
+    const runtime = createAiRuntime({ query: '?ia=mcts', seed: 1 });
+    runtime.update(frame());
+    const world = createSimWorld({ levelId: RAYCAST_LEVEL_BOSS.id, seed: 1 });
+    const boss = world.bosses[0];
+    const policy = runtime.bossPolicy()!;
+    policy.pickVolley(
+      boss,
+      { x: boss.x, y: boss.y + 3.4, alive: true, stationaryMs: 0, vx: 0, vy: 0, health: 100, damageTaken: 0 },
+      world.map,
+      { distance: 3.4, playerStationary: false, playerKiting: false, playerCornered: false, desperation: false, timeSinceLastVolleyMs: 800 },
+      5000
+    );
+    const text = runtime.panelLines(frame()).join('\n');
+    expect(text).toContain('MCTS');
+    expect(text).toContain('iteraciones');
+    expect(text).toMatch(/n=\d+/);
   });
 });
 

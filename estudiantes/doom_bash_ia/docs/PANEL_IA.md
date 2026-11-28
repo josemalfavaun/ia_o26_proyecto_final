@@ -1,6 +1,6 @@
 # Panel de IA dentro del juego
 
-Las tres IA del proyecto (A*, expectimax y bandido) se pueden activar mientras se juega, sin tocar código. Por omisión
+Las IA del proyecto (A*, expectimax, MCTS y bandido) se pueden activar mientras se juega, sin tocar código. Por omisión
 **todo está apagado**: el juego se comporta como el original (`legacy` para enemigos, `rule` para el jefe).
 
 ## Teclas
@@ -9,9 +9,9 @@ Las tres IA del proyecto (A*, expectimax y bandido) se pueden activar mientras s
 |---|---|
 | `I` | Muestra u oculta el panel de IA (esquina superior derecha). |
 | `U` | Cambia la navegación de enemigos: regla original, A*. |
-| `O` | Cambia el director del jefe: regla original, expectimax, bandido Thompson. |
+| `O` | Cambia el director del jefe: regla original, expectimax, MCTS, bandido Thompson. |
 
-También se pueden fijar desde la URL: `?ia=astar,bandido` (acepta `astar`, `legacy`, `expectimax`, `bandido`, `regla`).
+También se pueden fijar desde la URL: `?ia=astar,bandido` (acepta `astar`, `legacy`, `expectimax`, `mcts`, `bandido`, `regla`).
 La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan en `localStorage` del navegador.
 
 ## Qué muestra el panel
@@ -20,6 +20,8 @@ La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan
   panel está abierto, el minimapa dibuja en verde la ruta vigente de cada enemigo que persigue (de su posición a la
   meta, por los centros de celda que eligió A\*).
 - **Expectimax**: la última decisión del jefe, los tres ataques con mejor valor esperado y los milisegundos por decisión.
+- **MCTS**: la última decisión, las iteraciones y el horizonte, las visitas de las tres ramas más buscadas y los
+  milisegundos por decisión (detalle en [`MCTS.md`](MCTS.md)).
 - **Bandido**: el brazo en juego (meta de daño por salva), cuánto va de la ventana de 40 s, la media y el número de veces
   de cada brazo, y el último resultado (brazo, recompensa, vida restante, motivo de cierre).
 
@@ -33,7 +35,7 @@ La URL manda sobre lo guardado. Los modos y la creencia del bandido se recuerdan
 | Contexto del jefe | `buildBossPlayerCtx` agrega `health` y `damageTaken` | Campos opcionales; la regla original no los lee |
 
 El runtime no depende de Phaser: recibe tiempo y estado del jugador en un `AiFrame` y se prueba con
-`src/tests/ai-runtime.test.ts` (13 pruebas).
+`src/tests/ai-runtime.test.ts` (14 pruebas).
 
 ## Cómo aprende el bandido en el juego
 

@@ -15,21 +15,23 @@ import { createThompsonSelector, type ThompsonCounts, type ThompsonSelector } fr
 import { challengeReward } from '../bandit/reward';
 import { createSeededRng } from '../sim/rng';
 import type { ExpectimaxBossPolicy } from '../expectimax/policy';
+import { createMctsBossPolicy, type MctsBossPolicy } from '../mcts/policy';
 import type { RaycastBossPolicy } from '../../game/raycast/RaycastBossPolicy';
 import type { RaycastEnemyNavigator } from '../../game/raycast/RaycastEnemyNavigator';
 import type { RaycastEnemy } from '../../game/raycast/RaycastEnemy';
 import type { Waypoint } from '../astar/search';
 
 export type NavigationMode = 'legacy' | 'astar';
-export type BossDirectorMode = 'rule' | 'expectimax' | 'bandit';
+export type BossDirectorMode = 'rule' | 'expectimax' | 'mcts' | 'bandit';
 
 export const NAVIGATION_MODES: readonly NavigationMode[] = ['legacy', 'astar'];
-export const BOSS_DIRECTOR_MODES: readonly BossDirectorMode[] = ['rule', 'expectimax', 'bandit'];
+export const BOSS_DIRECTOR_MODES: readonly BossDirectorMode[] = ['rule', 'expectimax', 'mcts', 'bandit'];
 
 export const NAVIGATION_LABELS: Record<NavigationMode, string> = { legacy: 'regla original', astar: 'A*' };
 export const BOSS_DIRECTOR_LABELS: Record<BossDirectorMode, string> = {
   rule: 'regla original',
   expectimax: 'expectimax (ritmo 4)',
+  mcts: 'MCTS (ritmo 4)',
   bandit: 'bandido Thompson'
 };
 
@@ -37,6 +39,11 @@ export const BOSS_DIRECTOR_LABELS: Record<BossDirectorMode, string> = {
 export const ENCOUNTER_WINDOW_MS = 40_000;
 /** Meta de ritmo fija del modo expectimax: la del mejor brazo único medido en docs/DIRECTOR.md. */
 export const EXPECTIMAX_MODE_TARGET = 4;
+/**
+ * Configuración del modo MCTS en el juego: misma meta de ritmo que expectimax; exploración y horizonte
+ * elegidos con las semillas de ajuste de `bench:mcts` (objetivo ritmo); presupuesto de iteraciones fijo.
+ */
+export const MCTS_MODE_OPTIONS = { iterations: 256, horizon: 2, exploration: 1.4 } as const;
 
 export interface KeyValueStorage {
   getItem(key: string): string | null;
@@ -133,6 +140,7 @@ export function parseAiQuery(query: string): { navigation?: NavigationMode; boss
     if (token === 'astar' || token === 'a*') result.navigation = 'astar';
     else if (token === 'legacy' || token === 'original') result.navigation = 'legacy';
     else if (token === 'expectimax') result.boss = 'expectimax';
+    else if (token === 'mcts') result.boss = 'mcts';
     else if (token === 'bandit' || token === 'bandido') result.boss = 'bandit';
     else if (token === 'rule' || token === 'regla') result.boss = 'rule';
   }
@@ -228,6 +236,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
 
   let navigator: AStarNavigator | null = null;
   let expectimax: (RaycastBossPolicy & ExpectimaxBossPolicy) | null = null;
+  let mcts: MctsBossPolicy | null = null;
   let selector: ThompsonSelector = createBandit(validCounts(readJson(storage, BANDIT_KEY), arms));
   let episode: Episode | null = null;
   let lastResult: EncounterResult | null = null;
@@ -291,6 +300,16 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
   }
 
   function currentPolicy(): (RaycastBossPolicy & Partial<ExpectimaxBossPolicy>) | undefined {
+    if (bossMode === 'mcts') {
+      mcts ??= createMctsBossPolicy({
+        ...MCTS_MODE_OPTIONS,
+        pool: 'repertoire',
+        objective: 'pacing',
+        targetDamage: EXPECTIMAX_MODE_TARGET,
+        seed
+      });
+      return mcts as RaycastBossPolicy & Partial<ExpectimaxBossPolicy>;
+    }
     if (bossMode === 'expectimax') {
       expectimax ??= createArmBossPolicy({ id: 'expectimax', targetDamage: EXPECTIMAX_MODE_TARGET }) as RaycastBossPolicy & ExpectimaxBossPolicy;
       return expectimax;
@@ -323,6 +342,7 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       // Un encuentro a medias de otro modo no cuenta como evidencia.
       episode = null;
       expectimax = null;
+      mcts = null;
       saveModes();
       return bossMode;
     },
@@ -330,7 +350,10 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       frameContext = { levelId: frame.levelId, difficulty: frame.difficulty };
       if (study && bossMode !== 'bandit') bossMode = 'bandit';
       // Cada pelea nueva empieza con una política limpia (el déficit de ritmo no cruza peleas).
-      if (frame.bossAlive && !previousBossAlive) expectimax = null;
+      if (frame.bossAlive && !previousBossAlive) {
+        expectimax = null;
+        mcts = null;
+      }
       if (bossMode !== 'bandit') {
         episode = null;
       } else {
@@ -406,9 +429,16 @@ export function createAiRuntime(options: AiRuntimeOptions = {}): AiRuntime {
       const policy = currentPolicy() as Partial<ExpectimaxBossPolicy> | undefined;
       const decision = policy?.lastDecision?.();
       if (decision && policy?.stats) {
-        const ranked = [...decision.values].sort((a, b) => b.value - a.value).slice(0, 3);
         lines.push(`  decisión #${policy.stats.decisions}: ${decision.kind}`);
-        lines.push(`  ${ranked.map((entry) => `${entry.kind} ${entry.value.toFixed(1)}`).join(' | ')}`);
+        if (decision.values.some((entry) => entry.visits !== undefined)) {
+          // MCTS: se elige el más visitado; se muestran visitas de las tres ramas con más búsqueda.
+          const ranked = [...decision.values].sort((a, b) => (b.visits ?? 0) - (a.visits ?? 0)).slice(0, 3);
+          lines.push(`  ${MCTS_MODE_OPTIONS.iterations} iteraciones · horizonte ${MCTS_MODE_OPTIONS.horizon}`);
+          lines.push(`  ${ranked.map((entry) => `${entry.kind} n=${entry.visits}`).join(' | ')}`);
+        } else {
+          const ranked = [...decision.values].sort((a, b) => b.value - a.value).slice(0, 3);
+          lines.push(`  ${ranked.map((entry) => `${entry.kind} ${entry.value.toFixed(1)}`).join(' | ')}`);
+        }
         const perDecision = policy.stats.decisions > 0 ? policy.stats.wallMs / policy.stats.decisions : 0;
         lines.push(`  ${perDecision.toFixed(2)} ms por decisión`);
       }

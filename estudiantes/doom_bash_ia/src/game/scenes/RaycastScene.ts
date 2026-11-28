@@ -758,7 +758,8 @@ export class RaycastScene extends Phaser.Scene {
   private readonly handleCycleAiBoss = (): void => {
     if (this.gamePaused || !this.aiRuntime) return;
     const mode = this.aiRuntime.cycleBossDirector();
-    const label = mode === 'rule' ? 'REGLA ORIGINAL' : mode === 'expectimax' ? 'EXPECTIMAX' : 'BANDIDO THOMPSON';
+    const label =
+      mode === 'rule' ? 'REGLA ORIGINAL' : mode === 'expectimax' ? 'EXPECTIMAX' : mode === 'mcts' ? 'MCTS' : 'BANDIDO THOMPSON';
     this.setCombatMessage(`IA // JEFE: ${label}`, 1400);
     this.aiPanelRefreshAt = 0;
   };
